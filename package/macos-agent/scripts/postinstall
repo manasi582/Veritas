@@ -33,6 +33,9 @@ chmod 750 "$CONF_DIR" 2>/dev/null || true
 chmod 640 "$CONF_DIR/config.yaml" 2>/dev/null || true
 chmod 700 "$STATE_DIR" 2>/dev/null || true
 
+chmod 750 "$LOG_DIR" 2>/dev/null || true
+chmod 600 "$LOG_DIR"/* 2>/dev/null || true   # logs from earlier versions were readable by everyone
+
 # ── LaunchDaemon: installed but only started once the agent is configured ───
 cp -f "$PLIST_SRC" "$PLIST_DST" 2>/dev/null || true
 chown root:wheel "$PLIST_DST" 2>/dev/null || true

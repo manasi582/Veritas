@@ -34,6 +34,7 @@ case "$1" in
     # The one-time code the setup page asks for, so that only someone with access to this
     # server can create the first administrator. Created when the service starts; removed
     # once the first administrator exists.
+    if [ "$(id -u)" -ne 0 ]; then echo "This command needs administrator rights. Run: sudo veritas setup-code" >&2; exit 1; fi
     CODE_FILE="$DATA_DIR/secrets/setup_code"
     if [ -s "$CODE_FILE" ]; then
       echo "Setup code (enter it on the setup page at $URL/setup):"

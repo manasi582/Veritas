@@ -99,7 +99,7 @@ case "$1" in
     fi
     [ "$state" = running ] || exit 3
     ;;
-  logs)     tail -n 50 -f "$LOG" "$ERRLOG" ;;
+  logs)     need_root logs; tail -n 50 -f "$LOG" "$ERRLOG" ;;
   check)
     need_root check
     as_service --check
@@ -123,6 +123,7 @@ case "$1" in
     ;;
 
   setup-code)
+    need_root setup-code   # the folder is private; without sudo it looks as if there is no code
     CODE_FILE="$DATA_DIR/secrets/setup_code"
     if [ -s "$CODE_FILE" ]; then
       echo "Setup code (enter it on the setup page at $URL/setup):"; echo; cat "$CODE_FILE"; echo

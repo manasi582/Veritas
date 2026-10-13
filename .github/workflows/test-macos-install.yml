@@ -132,6 +132,19 @@ jobs:
           sudo veritas check || true     # warnings are fine; the report is in the log
           curl -sk "$VERITAS_URL/api/version"
 
+      - name: Files are private and the program belongs to root
+        run: |
+          # logs hold the setup code and operational detail: not readable by other users
+          for f in /var/log/veritas/veritas.log /var/log/veritas/veritas-error.log; do
+            mode=$(sudo stat -f '%Lp' "$f")
+            case "$mode" in *00) ;; *) echo "$f is readable by other users (mode $mode)"; exit 1;; esac
+          done
+          # the service must not be able to replace its own program
+          test "$(stat -f '%Su' /opt/veritas/veritas-runtime)" = "root" || { echo "program not owned by root"; ls -l /opt/veritas; exit 1; }
+          # without sudo the setup code is refused with the reason, not "there is no code"
+          if out=$(veritas setup-code 2>&1); then echo "setup-code worked without sudo"; exit 1; fi
+          echo "$out" | grep -q "sudo" || { echo "no hint to use sudo: $out"; exit 1; }
+
       # ── The dashboard in a real browser (setup, org, key, violation, users...) ─
       - name: Install the browser driver
         run: |

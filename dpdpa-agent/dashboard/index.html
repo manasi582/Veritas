@@ -4230,6 +4230,7 @@ async function triggerBackup() {
   await checkLicense();
   showServerVersion();
   refreshAlerts();
+  refreshHealth();   // fill the health card now, not only after the first 30 s tick
   setInterval(refreshAlerts, 10 * 60 * 1000);
   await populateOrgSelector();
   connectWS();

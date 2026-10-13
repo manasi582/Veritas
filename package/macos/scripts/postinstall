@@ -43,9 +43,13 @@ fi
 echo "[Veritas] Setting up data directories..."
 mkdir -p "$DATA_DIR" "$DATA_DIR/tmp" "$LOG_DIR" 2>/dev/null || true
 chown -R "$USER_NAME":staff "$DATA_DIR" "$LOG_DIR" 2>/dev/null || true
-chown -R "$USER_NAME":staff /opt/veritas 2>/dev/null || true
+# the program itself belongs to root: the service must not be able to replace its own binary
+chown -R root:wheel /opt/veritas 2>/dev/null || true
 chmod 700 "$DATA_DIR" 2>/dev/null || true
 chmod 755 "$DATA_DIR/tmp" 2>/dev/null || true
+
+chmod 750 "$LOG_DIR" 2>/dev/null || true
+chmod 600 "$LOG_DIR"/* 2>/dev/null || true   # logs from earlier versions were readable by everyone
 
 # ── 4. Install LaunchDaemon plist ───────────────────────────────────────────
 echo "[Veritas] Installing LaunchDaemon..."

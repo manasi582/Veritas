@@ -64,7 +64,7 @@ case "$1" in
     echo "Veritas Agent $VERSION: $state"
     [ "$state" = running ] || exit 3
     ;;
-  logs)    tail -n 50 -f "$LOG" ;;
+  logs)    need_root logs; tail -n 50 -f "$LOG" ;;
 
   fetch-cert)
     need_root fetch-cert

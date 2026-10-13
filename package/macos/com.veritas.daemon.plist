@@ -25,6 +25,10 @@
     <key>UserName</key>
     <string>_veritas</string>
 
+    <!-- files the service creates (logs, data) are readable by the service account only -->
+    <key>Umask</key>
+    <integer>63</integer>
+
     <key>RunAtLoad</key>
     <true/>
 
