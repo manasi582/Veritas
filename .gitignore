@@ -22,9 +22,6 @@ venv/
 veritas-launcher/*.exe
 
 # ---- Node / Vercel portal ----
-veritas-license-portal/node_modules/
-veritas-license-portal/.next/
-veritas-license-portal/.env.local
 
 # ---- SQLite databases (runtime data) ----
 *.db
@@ -54,3 +51,7 @@ dpdpa-agent/org_config/configs/phase4_test_org/
 
 # written by the release build
 dpdpa-agent/VERSION
+
+# The license portal is a separate repository (github.com/shreyaaassss/veritas-license-portal).
+# It lives in this folder on the owner's machine but is not part of this repo.
+veritas-license-portal/
