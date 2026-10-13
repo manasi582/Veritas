@@ -26,13 +26,27 @@ Set them with `sudo systemctl edit veritas` (add `[Service]` and `Environment=VE
 
 A backup on the same disk does not survive losing the disk. Point `VERITAS_BACKUP_DIR` at another disk or a network mount, or copy `/var/lib/veritas/backups/` elsewhere on a schedule (for example with `rsync` from your backup system). A backup contains secrets: store copies as carefully as the server itself.
 
-### Restoring
+### Backing up and restoring
 
-1. `sudo systemctl stop veritas`
-2. Check the file: `python backup.py verify <file>` (shipped with the source tree) or restore into a scratch directory first.
-3. Restore, then `sudo systemctl start veritas`.
+| Command (needs `sudo`) | What it does |
+|---|---|
+| `sudo veritas backup` | Make a backup now (the service keeps running; a backup also runs every 24 hours) |
+| `sudo veritas backups` | List the backups |
+| `sudo veritas verify-backup <file>` | Check that a backup file is complete and undamaged |
+| `sudo veritas restore <file> --dry-run` | Check a backup and show what would be restored; changes nothing |
+| `sudo veritas restore <file>` | Restore it: stops Veritas, replaces the data, starts Veritas again |
 
-The evidence chain check runs again at the next scheduled pass; you can also press **Verify Cryptographic Hash Chain** on the Audit Ledger page at any time.
+The backup file can be anywhere (a USB drive, a network share, your home folder).
+
+What `restore` does, so it is safe to use:
+
+- It checks the file first (checksums, that every database inside is healthy, that the file was not made by a *newer* Veritas than the one installed). A damaged or unsuitable backup is refused **before anything is changed**.
+- It refuses to run while the service is answering, because replacing databases under a running server corrupts them. The command stops the service for you.
+- What it replaces is copied to `backups/pre-restore-<time>/` inside the data folder first. If anything fails part-way, everything is put back automatically. Delete the `pre-restore-*` folder when you are satisfied (it holds old secrets and certificates).
+- The license currently installed is **kept**; the backup's license is not restored over it (so a restore cannot bring back an older or expired license). Use `--restore-license` to restore the backup's license as well.
+- After a restore, Veritas starts again and checks the evidence chain at its next pass; you can also press **Verify Cryptographic Hash Chain** on the Audit Ledger page.
+
+Moving to a new machine: install Veritas there, install a license issued for **that** machine's fingerprint (`veritas fingerprint`), then `sudo veritas restore <file>`. The secrets that protect the databases travel inside the backup, so the restored data stays readable.
 
 ## TLS certificate
 

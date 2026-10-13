@@ -24,6 +24,15 @@ as_service() {
   sudo -u "$SVC_USER" env VERITAS_DATA_DIR="$DATA_DIR" TMPDIR="$DATA_DIR/tmp" "$RUNTIME" "$@"
 }
 
+# The backup file must be readable by the service account (it runs the restore). A file in a
+# private folder (for example your home) is copied to a temporary place first.
+stage_backup() {   # $1 = file; prints the path to use
+  if sudo -u "$SVC_USER" test -r "$1" 2>/dev/null; then echo "$1"; return; fi
+  mkdir -p "$DATA_DIR/tmp" && chown "$SVC_USER":staff "$DATA_DIR/tmp"
+  local tmp="$DATA_DIR/tmp/restore-input-$$.zip"
+  cp "$1" "$tmp" && chown "$SVC_USER":staff "$tmp" && chmod 600 "$tmp" && echo "$tmp"
+}
+
 stop_service() {
   launchctl bootout system "$PLIST" 2>/dev/null || launchctl unload "$PLIST" 2>/dev/null || true
 }
@@ -150,6 +159,56 @@ case "$1" in
     report_start
     ;;
 
+  backup)
+    need_root backup
+    as_service --backup-now
+    ;;
+
+  backups)
+    need_root backups
+    as_service --list-backups
+    ;;
+
+  verify-backup)
+    need_root verify-backup
+    if [ -z "$2" ] || [ ! -f "$2" ]; then echo "Usage: sudo veritas verify-backup <backup.zip>"; exit 1; fi
+    F=$(stage_backup "$2") || exit 1
+    as_service --verify-backup "$F"; RC=$?
+    [ "$F" != "$2" ] && rm -f "$F"
+    exit $RC
+    ;;
+
+  restore)
+    # Restore a backup. The service is stopped for the restore and started again afterwards.
+    # What it replaces is kept in /var/lib/veritas/backups/pre-restore-<time>/.
+    need_root restore
+    FILE=""; EXTRA=()
+    shift
+    for a in "$@"; do
+      case "$a" in
+        --dry-run|--restore-license) EXTRA+=("$a") ;;
+        *) FILE="$a" ;;
+      esac
+    done
+    if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
+      echo "Usage: sudo veritas restore <backup.zip> [--dry-run] [--restore-license]"
+      echo "       List backups with: sudo veritas backups"
+      exit 1
+    fi
+    F=$(stage_backup "$FILE") || exit 1
+    cleanup() { [ "$F" != "$FILE" ] && rm -f "$F"; }
+    if [[ " ${EXTRA[*]} " == *" --dry-run "* ]]; then
+      as_service --restore "$F" "${EXTRA[@]}"; RC=$?; cleanup; exit $RC
+    fi
+    WAS_RUNNING=no; [ "$(service_state)" = running ] && WAS_RUNNING=yes
+    [ "$WAS_RUNNING" = yes ] && { echo "Stopping Veritas..."; stop_service; sleep 2; }
+    as_service --restore "$F" "${EXTRA[@]}"; RC=$?
+    cleanup
+    if [ "$WAS_RUNNING" = yes ]; then echo "Starting Veritas..."; start_service; fi
+    if [ $RC -eq 0 ]; then echo "Restore complete."; else echo "Restore FAILED: the previous data was left in place." >&2; fi
+    exit $RC
+    ;;
+
   reset-password)
     # Lost administrator password: set a temporary one (the user must choose their own at sign-in).
     need_root reset-password
@@ -220,6 +279,10 @@ case "$1" in
     echo "  fingerprint   Print machine fingerprint (send to Veritas for license)"
     echo "  setup-code    Print the one-time code the setup page asks for"
     echo "  license <f>   Install license file and restart"
+    echo "  backup        Create a backup now (a backup also runs every 24 hours)"
+    echo "  backups       List the backups"
+    echo "  verify-backup <f>   Check a backup file"
+    echo "  restore <f> [--dry-run] [--restore-license]   Restore a backup (stops and starts the service)"
     echo "  reset-password <user>   Set a temporary password (lost administrator password)"
     echo "  install-cert <cert> <key>   Install a company TLS certificate and restart"
     echo "  trust-cert    Make this Mac's browsers trust Veritas's own certificate"

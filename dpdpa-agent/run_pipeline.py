@@ -84,6 +84,13 @@ def main() -> None:
         help="Install a company-issued TLS certificate and its private key and exit "
              "(restart the service afterwards).",
     )
+    parser.add_argument("--backup-now", action="store_true", help="Create a backup now and exit.")
+    parser.add_argument("--list-backups", action="store_true", help="List the available backups and exit.")
+    parser.add_argument("--verify-backup", metavar="FILE", help="Check a backup file's integrity and exit.")
+    parser.add_argument("--restore", metavar="FILE", help="Restore data from a backup file and exit (stop the service first).")
+    parser.add_argument("--dry-run", action="store_true", help="With --restore: check the backup and show what would be restored.")
+    parser.add_argument("--restore-license", action="store_true", help="With --restore: also replace the current license.")
+    parser.add_argument("--force", action="store_true", help="With --restore: skip the running-server and newer-backup checks.")
     parser.add_argument(
         "--check", action="store_true",
         help="Run the production acceptance checks, print the report and exit.",
@@ -157,6 +164,50 @@ def main() -> None:
         if info["backup"]:
             print(f"  The previous certificate was kept as {info['backup']}")
         print("Restart Veritas to use it. Agents must trust the issuer (or be given the CA file).")
+        return
+
+    if args.backup_now or args.list_backups or args.verify_backup or args.restore:
+        import backup
+        if args.backup_now:
+            try:
+                print(f"Backup created: {backup.create_backup()}")
+            except Exception as e:
+                print(f"ERROR: {e}", file=sys.stderr)
+                raise SystemExit(1)
+        elif args.list_backups:
+            found = backup.list_backups()
+            if not found:
+                print("No backups found.")
+            for b in found:
+                print(f"  {b['filename']}  {b['created_at'] or 'unknown'}  {(b['size_bytes'] or 0) / 1_048_576:.1f} MB")
+        elif args.verify_backup:
+            from pathlib import Path
+            ok, errors = backup.verify_backup(Path(args.verify_backup))
+            for e in errors:
+                print(f"  ERROR: {e}", file=sys.stderr)
+            print(("VERIFIED OK: " if ok else "VERIFICATION FAILED: ") + args.verify_backup)
+            raise SystemExit(0 if ok else 1)
+        else:
+            from pathlib import Path
+            result = backup.restore_backup(Path(args.restore), dry_run=args.dry_run,
+                                           restore_license=args.restore_license, force=args.force)
+            for f in result["restored_files"]:
+                print(f"  {'would restore' if args.dry_run else 'restored'}: {f}")
+            for f in result["skipped_files"]:
+                print(f"  skipped: {f}")
+            for w in dict.fromkeys(result["warnings"]):
+                print(f"  NOTE: {w}")
+            for e in result["errors"]:
+                print(f"  ERROR: {e}", file=sys.stderr)
+            if result["success"] and not args.dry_run:
+                print(f"Restored {len(result['restored_files'])} files.")
+                if result["safety_copy"]:
+                    print(f"The data it replaced was kept in {result['safety_copy']} (delete it when you are satisfied).")
+            elif result["success"]:
+                print("DRY RUN OK: nothing was changed.")
+            else:
+                print("RESTORE FAILED. Your current data was left as it was (or put back).", file=sys.stderr)
+            raise SystemExit(0 if result["success"] else 1)
         return
 
     if args.check:

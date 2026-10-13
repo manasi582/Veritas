@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 import backup
+import os
 import maintenance
 import tls
 from evidence_store.store import EvidenceStore
@@ -91,6 +92,164 @@ class TestBackup:
                 copy.close()
         finally:
             stop.set(); t.join()
+
+
+class TestRestore:
+    """A restore must be safe: checked before it touches anything, undoable, and never a trap."""
+
+    def _snapshot(self, root):
+        return {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(root.rglob("*"))
+                if p.is_file() and "backups" not in p.relative_to(root).parts}
+
+    def _live(self, data, monkeypatch):
+        """Make `data` look like a live installation: files the restore replaces."""
+        (data / "veritas.vlic").write_text("CURRENT LICENSE")
+        (data / "secrets").mkdir(exist_ok=True); (data / "secrets" / "jwt_secret.key").write_text("old-secret")
+        (data / "certs").mkdir(exist_ok=True); (data / "certs" / "server.crt").write_text("crt")
+        monkeypatch.setattr(backup, "_server_running", lambda: False)
+
+    def test_restore_replaces_live_data_and_keeps_a_safety_copy(self, data, monkeypatch):
+        self._live(data, monkeypatch)
+        path = backup.create_backup()
+        import evidence_store.store as ev
+        ev.get_store().append(_verdict("org_a"))          # data that exists only after the backup
+        ev.reset_store()
+        (data / "secrets" / "jwt_secret.key").write_text("changed-after-backup")
+        (data / "certs" / "extra.pem").write_text("not in the backup")
+        res = backup.restore_backup(path)
+        assert res["success"], res
+        copy = EvidenceStore(db_path=data / "evidence.db")
+        assert copy.count("org_a") == 2 and copy.verify_chain("org_a")["valid"]
+        copy.close()
+        assert (data / "secrets" / "jwt_secret.key").read_text() == "old-secret"
+        assert not (data / "certs" / "extra.pem").exists(), "files that were not in the backup must not linger"
+        safety = Path(res["safety_copy"])
+        assert (safety / "secrets" / "jwt_secret.key").read_text() == "changed-after-backup"
+        assert EvidenceStore(db_path=safety / "evidence.db").count("org_a") == 3
+        assert not list(data.glob(".restore-staging-*")), "staging folder must be cleaned up"
+
+    def test_current_license_is_kept_unless_asked(self, data, monkeypatch):
+        self._live(data, monkeypatch)
+        (data / "veritas.vlic").write_text("OLD LICENSE IN BACKUP")
+        path = backup.create_backup()
+        (data / "veritas.vlic").write_text("NEWER LICENSE")
+        res = backup.restore_backup(path)
+        assert res["success"] and "veritas.vlic" in res["skipped_files"]
+        assert (data / "veritas.vlic").read_text() == "NEWER LICENSE"
+        assert backup.restore_backup(path, restore_license=True)["success"]
+        assert (data / "veritas.vlic").read_text() == "OLD LICENSE IN BACKUP"
+
+    def test_license_is_restored_when_there_is_none(self, data, monkeypatch):
+        self._live(data, monkeypatch)
+        path = backup.create_backup()
+        (data / "veritas.vlic").unlink()
+        assert backup.restore_backup(path)["success"]
+        assert (data / "veritas.vlic").read_text() == "CURRENT LICENSE"
+
+    def test_stale_sqlite_journal_files_are_removed(self, data, monkeypatch):
+        self._live(data, monkeypatch)
+        path = backup.create_backup()
+        for side in ("evidence.db-wal", "evidence.db-shm", "evidence.db-journal"):
+            (data / side).write_bytes(b"stale")
+        assert backup.restore_backup(path)["success"]
+        assert not any((data / n).exists() for n in ("evidence.db-wal", "evidence.db-shm", "evidence.db-journal"))
+
+    def test_refused_while_the_server_is_running(self, data, monkeypatch):
+        self._live(data, monkeypatch)
+        path = backup.create_backup()
+        before = self._snapshot(data)
+        monkeypatch.setattr(backup, "_server_running", lambda: True)
+        res = backup.restore_backup(path)
+        assert not res["success"] and "running" in res["errors"][0].lower()
+        assert self._snapshot(data) == before
+        assert backup.restore_backup(path, force=True)["success"]
+
+    def test_a_damaged_database_in_the_backup_is_refused_before_anything_changes(self, data, monkeypatch):
+        self._live(data, monkeypatch)
+        path = backup.create_backup()
+        # rebuild the archive with a corrupt evidence.db but a manifest that matches it
+        import hashlib, zipfile
+        bad = data / "backups" / "veritas-backup-bad.zip"
+        with zipfile.ZipFile(path) as zin, zipfile.ZipFile(bad, "w") as zout:
+            manifest = json.loads(zin.read("backup_manifest.json"))
+            for name in zin.namelist():
+                blob = zin.read(name)
+                if name == "evidence.db":
+                    blob = b"this is not a database" * 50
+                    manifest["files"][name] = {"type": "file", "sha256": hashlib.sha256(blob).hexdigest(), "size": len(blob)}
+                if name != "backup_manifest.json":
+                    zout.writestr(name, blob)
+            zout.writestr("backup_manifest.json", json.dumps(manifest))
+        assert backup.verify_backup(bad)[0], "checksums match, so only the integrity check can catch this"
+        before = self._snapshot(data)
+        res = backup.restore_backup(bad)
+        assert not res["success"] and "damaged" in res["errors"][0]
+        assert self._snapshot(data) == before, "live data must be untouched"
+
+    def test_a_failure_in_the_middle_rolls_everything_back(self, data, monkeypatch):
+        self._live(data, monkeypatch)
+        path = backup.create_backup()
+        (data / "secrets" / "jwt_secret.key").write_text("state-before-restore")
+        before = self._snapshot(data)
+        real = os.replace
+        calls = {"n": 0}
+        def flaky(src, dst):
+            calls["n"] += 1
+            if calls["n"] == 3:
+                raise OSError("disk full")
+            return real(src, dst)
+        monkeypatch.setattr(backup.os, "replace", flaky)
+        res = backup.restore_backup(path)
+        monkeypatch.setattr(backup.os, "replace", real)
+        assert not res["success"] and "rolled back" in res["errors"][0]
+        assert self._snapshot(data) == before, "the previous state must be put back exactly"
+
+    def test_paths_that_escape_the_data_folder_are_refused(self, data):
+        import hashlib, zipfile
+        (data / "backups").mkdir(exist_ok=True)
+        evil = data / "backups" / "veritas-backup-evil.zip"
+        manifest = {"backup_version": "1", "files": {}}
+        with zipfile.ZipFile(evil, "w") as z:
+            for name, blob in {"evidence.db": b"x", "agents.db": b"x", "users.db": b"x", "../outside.txt": b"pwned",
+                               "/etc/evil": b"pwned"}.items():
+                z.writestr(name, blob)
+                manifest["files"][name] = {"type": "file", "sha256": hashlib.sha256(blob).hexdigest(), "size": len(blob)}
+            z.writestr("backup_manifest.json", json.dumps(manifest))
+        res = backup.restore_backup(evil, target_root=data / "elsewhere")
+        assert not res["success"] and "unexpected file paths" in res["errors"][0]
+        assert not (data / "outside.txt").exists() and not (data / "elsewhere").exists()
+
+    def test_a_backup_from_a_newer_release_is_refused(self, data, monkeypatch):
+        self._live(data, monkeypatch)
+        path = backup.create_backup()
+        monkeypatch.setattr(backup, "_app_version", lambda: "1.0.20")
+        import zipfile, hashlib
+        newer = data / "backups" / "veritas-backup-newer.zip"
+        with zipfile.ZipFile(path) as zin, zipfile.ZipFile(newer, "w") as zout:
+            manifest = json.loads(zin.read("backup_manifest.json")); manifest["app_version"] = "9.0.0"
+            for name in zin.namelist():
+                if name != "backup_manifest.json":
+                    zout.writestr(name, zin.read(name))
+            zout.writestr("backup_manifest.json", json.dumps(manifest))
+        res = backup.restore_backup(newer)
+        assert not res["success"] and "newer" in res["errors"][0]
+        assert backup.restore_backup(newer, force=True)["success"]
+
+    def test_dry_run_changes_nothing(self, data, monkeypatch):
+        self._live(data, monkeypatch)
+        path = backup.create_backup()
+        (data / "secrets" / "jwt_secret.key").write_text("different")
+        before = self._snapshot(data)
+        res = backup.restore_backup(path, dry_run=True)
+        assert res["success"] and "evidence.db" in res["restored_files"]
+        assert self._snapshot(data) == before
+
+    def test_a_corrupt_archive_is_refused(self, data, monkeypatch):
+        self._live(data, monkeypatch)
+        junk = data / "backups"; junk.mkdir(exist_ok=True)
+        (junk / "veritas-backup-junk.zip").write_bytes(b"not a zip")
+        res = backup.restore_backup(junk / "veritas-backup-junk.zip")
+        assert not res["success"] and res["errors"]
 
 
 class TestScheduledRun:

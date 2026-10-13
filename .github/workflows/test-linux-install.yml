@@ -12,6 +12,7 @@ on:
       - 'package/build-deb.sh'
       - 'dpdpa-agent/license.py'
       - 'dpdpa-agent/run_pipeline.py'
+      - 'dpdpa-agent/backup.py'
       - 'dpdpa-agent/veritas-linux.spec'
       - 'tools/fingerprint.py'
       - 'tools/generate_license.py'
@@ -167,6 +168,36 @@ jobs:
           done
           sudo journalctl -u veritas --no-pager | tail -40
           exit 1
+
+      - name: Backup, verify and restore
+        run: |
+          OUT=$(sudo veritas backup); echo "$OUT"
+          BK=$(sed -n 's/^Backup created: //p' <<<"$OUT")
+          test -n "$BK" || { echo "no backup path printed"; exit 1; }
+          sudo veritas backups | grep -q "$(basename "$BK")" || { echo "backup not listed"; exit 1; }
+          sudo veritas verify-backup "$BK" | grep -q "VERIFIED OK"
+          # a backup in a private folder is still readable by the command
+          sudo mkdir -p /root/bk && sudo cp "$BK" /root/bk/private.zip
+          sudo veritas verify-backup /root/bk/private.zip | grep -q "VERIFIED OK"
+          # change something after the backup
+          echo marker | sudo tee /var/lib/veritas/certs/added-after-backup.pem >/dev/null
+          # a dry run changes nothing
+          sudo veritas restore "$BK" --dry-run | grep -q "DRY RUN OK"
+          sudo test -e /var/lib/veritas/certs/added-after-backup.pem || { echo "dry run changed data"; exit 1; }
+          # the real restore: service stopped, data restored, service started again
+          sudo veritas restore "$BK"
+          if sudo test -e /var/lib/veritas/certs/added-after-backup.pem; then echo "restore left a file that was not in the backup"; exit 1; fi
+          sudo ls /var/lib/veritas/backups | grep -q '^pre-restore-' || { echo "no safety copy of the replaced data"; exit 1; }
+          test "$(sudo stat -c '%U' /var/lib/veritas/users.db)" = "veritas" || { echo "restored files are not owned by the service account"; exit 1; }
+          for i in $(seq 1 36); do
+            curl -sk https://localhost:8000/health | grep -q '"status":"ok"' && break
+            sleep 5
+          done
+          curl -sk https://localhost:8000/health | grep -q '"status":"ok"' || { sudo journalctl -u veritas --no-pager | tail -40; exit 1; }
+          # a damaged file is refused and nothing is changed
+          echo junk > /tmp/junk.zip
+          if sudo veritas restore /tmp/junk.zip; then echo "a corrupt backup was accepted"; exit 1; fi
+          curl -sk https://localhost:8000/health | grep -q '"status":"ok"' || { echo "service not running after a refused restore"; exit 1; }
 
       - name: Crash recovery (SIGKILL)
         run: |
