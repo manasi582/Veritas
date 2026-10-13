@@ -375,6 +375,17 @@ def restore_backup(backup_path: Path, *, dry_run: bool = False,
         to_restore.append(arcname)
 
     if dry_run:
+        # The same checks the real restore makes before it touches anything, in a scratch folder.
+        with tempfile.TemporaryDirectory(prefix="veritas-restore-check-") as scratch, \
+                zipfile.ZipFile(backup_path, "r") as zf:
+            for arcname in to_restore:
+                if arcname.endswith(".db"):
+                    probe = Path(scratch) / arcname
+                    probe.write_bytes(zf.read(arcname))
+                    problem = _integrity_problem(probe)
+                    if problem:
+                        result["errors"].append(f"{arcname} in the backup is damaged ({problem}).")
+                        return result
         result["restored_files"] = to_restore
         result["success"] = True
         return result

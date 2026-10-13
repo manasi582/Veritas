@@ -144,6 +144,12 @@ case "$1" in
     if [[ " ${EXTRA[*]} " == *" --dry-run "* ]]; then
       as_service --restore "$F" "${EXTRA[@]}"; RC=$?; cleanup; exit $RC
     fi
+    # Check the file first. A bad file must not cost the customer any downtime.
+    if ! PRE=$(as_service --restore "$F" --dry-run "${EXTRA[@]}" 2>&1); then
+      echo "$PRE" >&2; cleanup
+      echo "Restore refused: nothing was stopped or changed." >&2
+      exit 1
+    fi
     WAS_RUNNING=no; systemctl is-active --quiet veritas && WAS_RUNNING=yes
     [ "$WAS_RUNNING" = yes ] && { echo "Stopping Veritas..."; systemctl stop veritas; }
     as_service --restore "$F" "${EXTRA[@]}"; RC=$?

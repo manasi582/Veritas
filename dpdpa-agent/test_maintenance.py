@@ -101,6 +101,11 @@ class TestRestore:
         return {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(root.rglob("*"))
                 if p.is_file() and "backups" not in p.relative_to(root).parts}
 
+    def _stop_service(self):
+        """What stopping the real service does: no open handle on the databases (Windows cannot replace an open file)."""
+        import evidence_store.store as ev
+        ev.reset_store()
+
     def _live(self, data, monkeypatch):
         """Make `data` look like a live installation: files the restore replaces."""
         (data / "veritas.vlic").write_text("CURRENT LICENSE")
@@ -132,6 +137,7 @@ class TestRestore:
         self._live(data, monkeypatch)
         (data / "veritas.vlic").write_text("OLD LICENSE IN BACKUP")
         path = backup.create_backup()
+        self._stop_service()
         (data / "veritas.vlic").write_text("NEWER LICENSE")
         res = backup.restore_backup(path)
         assert res["success"] and "veritas.vlic" in res["skipped_files"]
@@ -142,6 +148,7 @@ class TestRestore:
     def test_license_is_restored_when_there_is_none(self, data, monkeypatch):
         self._live(data, monkeypatch)
         path = backup.create_backup()
+        self._stop_service()
         (data / "veritas.vlic").unlink()
         assert backup.restore_backup(path)["success"]
         assert (data / "veritas.vlic").read_text() == "CURRENT LICENSE"
@@ -149,6 +156,7 @@ class TestRestore:
     def test_stale_sqlite_journal_files_are_removed(self, data, monkeypatch):
         self._live(data, monkeypatch)
         path = backup.create_backup()
+        self._stop_service()
         for side in ("evidence.db-wal", "evidence.db-shm", "evidence.db-journal"):
             (data / side).write_bytes(b"stale")
         assert backup.restore_backup(path)["success"]
@@ -157,6 +165,7 @@ class TestRestore:
     def test_refused_while_the_server_is_running(self, data, monkeypatch):
         self._live(data, monkeypatch)
         path = backup.create_backup()
+        self._stop_service()
         before = self._snapshot(data)
         monkeypatch.setattr(backup, "_server_running", lambda: True)
         res = backup.restore_backup(path)
@@ -222,6 +231,7 @@ class TestRestore:
     def test_a_backup_from_a_newer_release_is_refused(self, data, monkeypatch):
         self._live(data, monkeypatch)
         path = backup.create_backup()
+        self._stop_service()
         monkeypatch.setattr(backup, "_app_version", lambda: "1.0.20")
         import zipfile, hashlib
         newer = data / "backups" / "veritas-backup-newer.zip"
@@ -243,6 +253,25 @@ class TestRestore:
         res = backup.restore_backup(path, dry_run=True)
         assert res["success"] and "evidence.db" in res["restored_files"]
         assert self._snapshot(data) == before
+
+    def test_dry_run_also_catches_a_damaged_database(self, data, monkeypatch):
+        """The command checks with a dry run before it stops the service, so this must catch it."""
+        self._live(data, monkeypatch)
+        path = backup.create_backup()
+        import hashlib, zipfile
+        bad = data / "backups" / "veritas-backup-bad-dry.zip"
+        with zipfile.ZipFile(path) as zin, zipfile.ZipFile(bad, "w") as zout:
+            manifest = json.loads(zin.read("backup_manifest.json"))
+            for name in zin.namelist():
+                blob = zin.read(name)
+                if name == "users.db":
+                    blob = b"garbage" * 100
+                    manifest["files"][name] = {"type": "file", "sha256": hashlib.sha256(blob).hexdigest(), "size": len(blob)}
+                if name != "backup_manifest.json":
+                    zout.writestr(name, blob)
+            zout.writestr("backup_manifest.json", json.dumps(manifest))
+        res = backup.restore_backup(bad, dry_run=True)
+        assert not res["success"] and "damaged" in res["errors"][0]
 
     def test_a_corrupt_archive_is_refused(self, data, monkeypatch):
         self._live(data, monkeypatch)
