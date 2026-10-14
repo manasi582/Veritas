@@ -1,6 +1,6 @@
 # Operating Veritas
 
-What the appliance does by itself, what you should watch, and the few things an administrator does from time to time. Commands assume the Linux package (`sudo veritas …`).
+What the appliance does by itself, what you should watch, and the few things an administrator does from time to time. Commands assume the Linux package (`sudo veritas …`). The same commands work on macOS; the differences (file locations, how settings are changed, the agent) are in [MACOS.md](MACOS.md).
 
 ## What Veritas does by itself
 
@@ -20,7 +20,7 @@ Backups use SQLite's online backup, so they are consistent while Veritas is rece
 | `VERITAS_BACKUP_KEEP` | 7 | how many backups to keep |
 | `VERITAS_BACKUP_DIR` | `<data dir>/backups` | where backups go |
 
-Set them with `sudo systemctl edit veritas` (add `[Service]` and `Environment=VERITAS_BACKUP_KEEP=14`), then `sudo systemctl restart veritas`.
+Set them with `sudo systemctl edit veritas` (add `[Service]` and `Environment=VERITAS_BACKUP_KEEP=14`), then `sudo systemctl restart veritas`. On macOS, add them to the `EnvironmentVariables` section of `/Library/LaunchDaemons/com.veritas.daemon.plist` and run `sudo veritas restart`; an upgrade replaces that file, so re-apply them afterwards (see MACOS.md).
 
 ### Keep a copy off the machine
 

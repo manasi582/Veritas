@@ -28,8 +28,10 @@ if [ "$OS" = "linux" ]; then
   dpkg -i /tmp/veritas.deb
   rm /tmp/veritas.deb
   echo ""
-  echo "Veritas installed! Start with: sudo systemctl start veritas"
-  echo "Then open: http://localhost:8000/setup"
+  echo "Veritas installed. Next:"
+  echo "  1. veritas fingerprint                      (send the line it prints to your Veritas contact)"
+  echo "  2. sudo veritas license /path/to/your.vlic  (installs the license and starts the service)"
+  echo "  3. sudo veritas setup-code                  (then open https://localhost:8000/setup)"
 
 elif [ "$OS" = "darwin" ]; then
   PKG="veritas_${VERSION#v}_${ARCH}.pkg"
@@ -38,7 +40,11 @@ elif [ "$OS" = "darwin" ]; then
   installer -pkg /tmp/veritas.pkg -target /
   rm /tmp/veritas.pkg
   echo ""
-  echo "Veritas installed! Open: http://localhost:8000/setup"
+  echo "Veritas installed. Next:"
+  echo "  1. veritas fingerprint                      (send the line it prints to your Veritas contact)"
+  echo "  2. sudo veritas license /path/to/your.vlic  (installs the license and starts the service)"
+  echo "  3. sudo veritas setup-code                  (then open https://localhost:8000/setup)"
+  echo "More: https://github.com/${REPO}/blob/main/docs/MACOS.md"
 
 else
   echo "Windows: download the installer from:"
