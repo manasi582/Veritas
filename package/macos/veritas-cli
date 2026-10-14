@@ -26,6 +26,13 @@ as_service() {
 
 # The backup file must be readable by the service account (it runs the restore). A file in a
 # private folder (for example your home) is copied to a temporary place first.
+# A bare file name, as printed by `veritas backups`, means a file in the backups folder.
+resolve_backup() {
+  if [ -f "$1" ] || [ -z "$1" ]; then echo "$1"
+  elif [ -f "$DATA_DIR/backups/$1" ]; then echo "$DATA_DIR/backups/$1"
+  else echo "$1"; fi
+}
+
 stage_backup() {   # $1 = file; prints the path to use
   if sudo -u "$SVC_USER" test -r "$1" 2>/dev/null; then echo "$1"; return; fi
   mkdir -p "$DATA_DIR/tmp" && chown "$SVC_USER":staff "$DATA_DIR/tmp"
@@ -171,6 +178,7 @@ case "$1" in
 
   verify-backup)
     need_root verify-backup
+    set -- "$1" "$(resolve_backup "$2")"
     if [ -z "$2" ] || [ ! -f "$2" ]; then echo "Usage: sudo veritas verify-backup <backup.zip>"; exit 1; fi
     F=$(stage_backup "$2") || exit 1
     as_service --verify-backup "$F"; RC=$?
@@ -190,6 +198,7 @@ case "$1" in
         *) FILE="$a" ;;
       esac
     done
+    FILE=$(resolve_backup "$FILE")
     if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
       echo "Usage: sudo veritas restore <backup.zip> [--dry-run] [--restore-license]"
       echo "       List backups with: sudo veritas backups"
