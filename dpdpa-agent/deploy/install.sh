@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Veritas — One-shot install script for Raspberry Pi OS / Debian-based Linux
+# Veritas — One-shot install-from-source script for Debian/Ubuntu-based Linux (development; customers use the .deb)
 #
 # Run once from the repository root:
 #   sudo bash deploy/install.sh

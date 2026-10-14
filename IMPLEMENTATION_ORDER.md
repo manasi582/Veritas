@@ -1,13 +1,14 @@
 # Implementation Order
 
-Status (2026-10-06):
+Status (2026-10-14), latest release **v1.0.22**:
 
 | Milestone | State |
 |---|---|
-| 1. Linux works | **Done.** Released as v1.0.16; v1.0.17 adds the agent `source_type` fix. Linux install test passes in CI. A real Ubuntu machine ran the dashboard. Remaining from that test: restart and crash-recovery checks reported back by the tester |
-| 2. License portal | **Code done and tested against the real Supabase project (2026-10-14), not deployed.** Needs the Vercel variables and deploy. |
-| 3. Architecture changes | Not started. Waits for the simulation's load numbers |
-| **4. Enterprise agent and telemetry alignment** | **Planned (below). Starts next.** Brings the agent and deployments in line with the product spec "Enterprise Telemetry, Agent & Compliance Flow" |
+| 1. Linux works | **Done.** Released; install test passes in CI; a separate Ubuntu machine ran the whole acceptance checklist (v1.0.19) |
+| 2. License portal | **Done and live** (own repository `veritas-license-portal`, Vercel and Supabase). Verified end to end against the real database, including a four-way reissue race. Left by decision: no real revocation. Open: a separate signing key for CI |
+| 3. Architecture changes | Not started. Waits for load-test numbers (load and long-run testing is the next big item) |
+| 4. Enterprise agent and telemetry alignment | Phases A to C and E **done** (agent hardening, packaging and health, operations, housekeeping). Phase D (sanitization mode B) waits for design decisions |
+| 5. macOS to the Ubuntu level | **Done** except: M4 (install the latest release on a real, clean Mac, in progress) and M5 (signing and notarization, parked until an Apple Developer account exists). Mac server, Mac agent, `veritas` commands, CI install tests and the Mac guide (`docs/MACOS.md`) are in. Open backlog: log rotation, a settings file that survives upgrades |
 | Simulation | A teammate builds it from `veritas-demo/SIMULATION_PLAN.md` |
 
 Goal of the first milestone: **a Linux `.deb` that installs, activates with a license, and runs reliably**, verified by an automated install test. Everything else comes after.
@@ -38,7 +39,7 @@ Done and tested: fingerprint validation (`v2:` + 64 hex, or legacy 64 hex) befor
 **Verified against the real Supabase project (2026-10-14):** 16-step end-to-end run (issue, duplicate refused, bad fingerprint refused, list without license text, download identical, reissue marks the old record Replaced, no double replace, audit rows, delete record keeps history) all passed; a license issued by the portal for this Mac is accepted by `license.py`; the public (anon) key is refused (401) for read, insert, update and delete on both tables. Found on the way: a reissue is several database calls, so a process that dies between saving the new license and marking the old one leaves two active licenses (left as a known limitation until it is made a single database function). Secrets had been pasted into the tracked `.env.local.example`; moved to the ignored `.env.local` before any commit.
 Done 2026-10-14: portal pushed to its own repo (github.com/shreyaaassss/veritas-license-portal, commit eb1a42a) and Vercel built it; step 9 resolved as **separate repositories**: the submodule link and `.gitmodules` were removed from this repo and the folder is git-ignored here (it stays on the owner's disk as its own clone). Still needed: set the four variables in the Vercel project (ADMIN_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY, VERITAS_PRIVATE_KEY; until then the live portal answers 503 "ADMIN_SECRET must be set", which is the intended fail-closed behaviour), redeploy, a live end-to-end test, and the separate CI signing key.
 
-Left aside for now (your call): revocation, renewal/reissue, multi-user login, license id, tier limits. All are listed in `LICENSE_PORTAL_REVIEW.md`.
+Left aside for now (your call): revocation, renewal/reissue, multi-user login, license id, tier limits. All are listed in `docs/archive/LICENSE_PORTAL_REVIEW.md`.
 
 ## Milestone 3: Architecture changes (after Milestone 1 passes)
 
@@ -131,8 +132,8 @@ The first version of this phase mixed polish with items that need measurements o
 
 ### Phase E: Housekeeping
 
-- Remove Raspberry Pi wording from docs and install scripts (spec: enterprise software, not an appliance requirement).
-- Update `PROJECT_OVERVIEW.md` and `INSTALL.md` to reflect the agent changes.
+- ~~Remove Raspberry Pi wording from docs and install scripts~~ Done 2026-10-14: removed from the install-from-source scripts and their README; the old planning documents that mention it were moved to `docs/archive/` as history. `docs/ENTERPRISE_TELEMETRY_SPEC.md` keeps the decision itself (enterprise software, not an appliance requirement).
+- ~~Update `PROJECT_OVERVIEW.md` and `INSTALL.md`~~ Done 2026-10-14, together with a new `README.md`, `docs/MACOS.md` and `docs/CUSTOMER_ONBOARDING.md`.
 - ~~Store the enterprise telemetry spec in the repo~~ Done: `docs/ENTERPRISE_TELEMETRY_SPEC.md`.
 
 ### Decisions needed before Phase B
@@ -183,7 +184,7 @@ Backlog from this milestone: a macOS settings file that survives upgrades (like 
 | Support email | No support mailbox exists yet. The product says `support@veritas.io` (license errors in `license.py`, `license.go`, `tools/fingerprint.py`) and the `.deb` control file says `support@veritas.app`. Create the real address, then replace all of them with one value (ideally one constant). |
 | CI signing key | CI tests sign licenses with the production private key stored in the `VERITAS_PRIVATE_KEY_B64` secret. Move to a separate test keypair and a test build that embeds its public key. |
 | Reissue of old licenses | Test licenses from before v2 are invalid on Linux by design. No customer licenses exist, so nothing to migrate. |
-| Portal: revocation, renewal/reissue, license id, multi-user login, tier limits | Deferred by decision; see `LICENSE_PORTAL_REVIEW.md`. |
+| Portal: revocation, renewal/reissue, license id, multi-user login, tier limits | Deferred by decision; see `docs/archive/LICENSE_PORTAL_REVIEW.md`. |
 | Go launcher gofmt | `license.go` and `main_linux.go` already fail `gofmt -l` (comment formatting). Cosmetic. |
 | Docker log source reconnect | `tail_docker` ends silently when the container restarts or the stream drops (the source is now shown as "error: log stream ended" in the dashboard, but it is not re-attached). Add a reconnect loop with backoff. |
 | Agent API org scoping elsewhere | After the agent-management fix, audit the remaining routes that take `org_id` in a query or body rather than the path for the same missing membership check. |

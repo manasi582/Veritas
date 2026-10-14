@@ -1,8 +1,11 @@
-# Veritas — Deployment Guide
+# Veritas — Installing from source (advanced)
+
+> Customers install Veritas from the packages (`.deb`, `.pkg`, Windows installer): see `INSTALL.md`.
+> These scripts install the server **from a source checkout** on Debian/Ubuntu or macOS, for development and unusual setups.
 
 ## Requirements
 
-- Raspberry Pi OS (64-bit) or any Debian/Ubuntu-based Linux
+- Debian/Ubuntu-based Linux (64-bit)
 - Python 3.10+
 - 4 GB RAM recommended (spaCy NLP model uses ~400 MB)
 - Network access on first install (to download Python packages and spaCy model)
@@ -25,7 +28,7 @@ This will:
 5. Install and enable the `veritas` systemd service
 6. Start Veritas immediately
 
-Installation takes **5–15 minutes** on a Raspberry Pi (mostly the spaCy model download).
+Installation takes **5–15 minutes** (mostly the spaCy model download).
 
 ---
 
@@ -128,4 +131,4 @@ The spaCy model requires ~400 MB. If the Pi runs out of memory, check:
 free -h
 journalctl -u veritas | grep -i "killed\|oom"
 ```
-Consider closing other services or using a Pi 4 (4 GB).
+Consider closing other services or using a machine with more memory (4 GB or more is recommended).

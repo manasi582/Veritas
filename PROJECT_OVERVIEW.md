@@ -9,13 +9,13 @@ Veritas is an on-premise compliance monitoring platform for India's Digital Pers
 4. [How it works](#4-how-it-works)
 5. [Example: deploying in a real company](#5-example-deploying-in-a-real-company)
 
-Related documents: `docs/ENTERPRISE_TELEMETRY_SPEC.md` (the intended enterprise agent and telemetry model), `IMPLEMENTATION_ORDER.md` (roadmap and backlog), `LINUX_TEST_FINDINGS.md`, `LICENSE_PORTAL_REVIEW.md`, `veritas-demo/SIMULATION_PLAN.md`, `INSTALL.md` (install steps).
+Related documents: `README.md` (start here), `INSTALL.md` (install steps, all platforms), `docs/MACOS.md`, `docs/OPERATIONS.md` (running it), `docs/CUSTOMER_ONBOARDING.md` (the vendor's runbook), `docs/ENTERPRISE_TELEMETRY_SPEC.md` (the intended enterprise agent and telemetry model), `IMPLEMENTATION_ORDER.md` (what was done and what is open), `veritas-demo/SIMULATION_PLAN.md`, and `docs/archive/` (historical planning documents).
 
 ---
 
 ## 1. Project status
 
-Last updated: 2026-10-05. Latest release: **v1.0.16**.
+Last updated: 2026-10-14. Latest release: **v1.0.22**.
 
 ### What is built and verified
 
@@ -23,39 +23,37 @@ Last updated: 2026-10-05. Latest release: **v1.0.16**.
 |---|---|---|
 | Detection (PII in logs/API payloads) | Working | Presidio + spaCy with custom Aadhaar, PAN and Indian phone recognizers |
 | Rule engine | Working | Four rules: EXPOSURE_001, PURPOSE_001, RETENTION_001, LINKAGE_001 |
-| Evidence store | Working | Append-only SQLite, SHA-256 hash chain per organisation, chain verification |
-| Dashboard | Working | Overview, Live Stream, Audit Ledger, Agents, Policy, Audit Log, Scan Sandbox |
-| Authentication and roles | Working | Local accounts; roles SUPER_ADMIN, COMPLIANCE_ADMIN, AUDITOR, VIEWER; RBAC tests |
-| Agent registration | Working | One-time registration keys, per-agent token, heartbeat, revoke |
-| Agent (log forwarder) | Working | File and Docker log tailing, retry and bounded buffer; Docker, Kubernetes DaemonSet and `.deb` forms |
-| Licensing | Working | RSA-PSS signed `.vlic`, machine-bound option; portal signing verified against the Python and Go verifiers |
+| Evidence store | Working | Append-only SQLite, SHA-256 hash chain per organisation, chain verification (also run with every backup) |
+| Dashboard | Working | Overview (with a system-health panel), Live Stream, Audit Ledger, Agents, Policy, Users, Audit Log, Scan Sandbox; driven by a real browser in CI |
+| Authentication and roles | Working | Local accounts; roles SUPER_ADMIN, COMPLIANCE_ADMIN, AUDITOR, VIEWER; password policy (10+ characters, common-password list, no username or email), forced change after a reset, per-account lockout, sessions revoked on password change, offline `reset-password` |
+| Agent (log forwarder) | Working | File and Docker log tailing, rotation and truncation handled, retry and bounded buffer, health reported with every heartbeat; forms: Linux `.deb`, macOS `.pkg` (self-contained), Docker image, Kubernetes DaemonSet |
+| Licensing | Working | RSA-PSS signed `.vlic`, machine-bound; `v2:` fingerprints on Linux (machine-id) and macOS (hardware UUID); the portal's output is checked against the Python and Go verifiers |
+| License portal | Live, own repository | Fingerprint validation, no unsaved licenses, license id, Reissue (one database transaction), re-download, audit log, hardened admin login, row-level security; 21 unit tests plus end-to-end runs against the real database |
+| Backup and restore | Working | Daily verified backups; `veritas backup`, `backups`, `verify-backup`, `restore` (checks the file first, keeps a safety copy, rolls back on failure); tested in CI on Ubuntu and macOS |
+| Operations | Working | Warnings for license, TLS certificate and disk; company certificate install; `veritas check` acceptance command |
 | Multi-organisation | Working, org-agnostic | No customer-specific code or bundled configs; each org uploads its own config |
-| Linux package | Released and tested | `.deb` installs and runs on a clean Ubuntu 22.04 runner in CI |
-| macOS and Windows installers | Released and tested in CI | `.pkg` and installer pass their install tests |
-| Automated tests | 412 passing, 1 skipped | Run on Ubuntu, macOS and Windows in CI |
+| Linux package | Released, tested | `.deb` installed and exercised on a clean Ubuntu 22.04 runner in CI, and by hand on a separate Ubuntu machine |
+| macOS packages | Released, tested in CI | Server and agent `.pkg` installed on a clean Apple-silicon runner: license binding, browser test, agent, restart, certificate, backup and restore, upgrade over the same version, uninstall; the server `.pkg` has also been run on a real Mac |
+| Windows installer | Released, tested in CI | Installer test passes; older fingerprint scheme, no agent package |
+| Automated tests | About 760 server tests, 138 agent tests, 21 portal tests | Server and agent suites run on Ubuntu, macOS and Windows in CI |
 
-### Done in the current cycle
-- Removed all customer-specific code and bundled sample configs; the product is org-agnostic. Fixed a retention bug (retention is now measured from an optional per-field `data_since`, defaulting to when the org config was uploaded).
-- Linux fingerprint v2 (machine-id based). The CLI and the running service now compute the same value; the old method could differ between them.
-- A missing or invalid license now stops the service once with a clear message instead of crash-looping.
-- Added a Linux install test to CI (build, install, license cases, restart, crash recovery, uninstall).
-- Released v1.0.16.
-
-### In progress / not yet done
+### Open items
 | Item | Status |
 |---|---|
-| Test on real Ubuntu hardware | Next: a tester with an Ubuntu machine installs v1.0.16 using a license issued for their fingerprint |
+| Load and long-run testing | Planned: heavy log volume, weeks of uptime, SQLite limits. Detection currently runs inside the `/events` request, so heavy bursts from many agents are not proven |
+| Ingest queue and worker pool | Planned, after the baseline from load testing |
 | Simulated enterprise environment | Planned (`veritas-demo/SIMULATION_PLAN.md`); a teammate will build it |
-| Ingest queue and worker pool | Planned. Detection currently runs inside the `/events` request, so heavy bursts from many agents are not yet proven |
-| License portal fixes | Planned: fingerprint validation, row-level security on its database, save-failure reporting; needs a new Supabase project |
-| macOS and Windows fingerprint | Still the older scheme; to be moved to the same machine-id style scheme |
+| macOS: log rotation, a settings file that survives upgrades | Open (see `IMPLEMENTATION_ORDER.md`); signing and notarization parked until an Apple Developer account exists |
+| Windows: fingerprint v2, an agent package | Open |
+| Sanitization mode B | Needs design decisions |
 | Offline hardening | Planned: bundle fonts and the PDF library locally |
-| Support email, CI signing key, other items | Listed in the backlog in `IMPLEMENTATION_ORDER.md` |
+| Support email, a separate CI signing key, other items | Listed in the backlog in `IMPLEMENTATION_ORDER.md` |
 
 ### Known limitations
-- One server process and SQLite: suitable for a pilot and mid-sized deployments, not for horizontal scale.
-- License "revocation" is not enforceable (licenses are files verified offline and expire by date).
+- One server process and SQLite: suitable for a pilot and mid-sized deployments, not for horizontal scale; no high availability.
+- License "revocation" is not enforceable (licenses are files verified offline and expire by date); the portal's "Delete record" only removes its own entry.
 - Performance at about 100 events per second is untested.
+- No outside security review has been done.
 
 ---
 
@@ -97,16 +95,17 @@ Last updated: 2026-10-05. Latest release: **v1.0.16**.
 | PII detection | Microsoft Presidio, spaCy `en_core_web_lg`, custom recognizers (Aadhaar, PAN, Indian phone) with validators |
 | Storage | SQLite (evidence, agents, users, audit log), YAML (org configs) |
 | Frontend | Single-page vanilla HTML/CSS/JS served by the server (no build step) |
-| Agent | Python (Docker image, `.deb`, Kubernetes manifests) |
-| Packaging | PyInstaller binary; `.deb` (Linux), `.pkg` (macOS), Inno Setup installer (Windows); Go launcher for service management |
+| Agent | Python (Docker image, `.deb`, Kubernetes manifests); a single-file build for macOS |
+| Packaging | PyInstaller binary; `.deb` (Linux), `.pkg` (macOS, server and agent), Inno Setup installer (Windows); systemd on Linux, launchd on macOS, a Go launcher for the Windows service |
 | Licensing | RSA-2048, RSA-PSS SHA-256, base64 payload; Go and Python verifiers |
-| License portal | Next.js 14, Supabase (PostgreSQL), hosted on Vercel |
+| License portal | Next.js 14, Supabase (PostgreSQL, row-level security), hosted on Vercel; its own repository |
 | CI | GitHub Actions: cross-platform tests, per-OS install tests, tagged release builds |
 
 ### Repository layout
 ```
 dpdpa-agent/            core server
-  run_pipeline.py       entry point (--fingerprint, --check, --port)
+  run_pipeline.py       entry point and command-line tools (--fingerprint, --check, --setup-code,
+                        --reset-password, --install-cert, --backup-now, --restore, --port)
   dashboard/            FastAPI app, WebSocket live feed, HTML pages
   api/                  event ingestion, agents, auth, RBAC dependencies
   detection/            PII detection engine and custom recognizers
@@ -115,17 +114,19 @@ dpdpa-agent/            core server
   org_config/           org config schema, validator, versioned store
   registry/             builds per-field policy entries from the org config
   user_store/           accounts and roles
+  backup.py, maintenance.py   backups, restore, scheduled backup and chain check
   llm_explainer/        templated and optional LLM explanations
   license.py            license validation and machine fingerprint
   tests/fixtures/       sample org configs used only by the tests
-veritas-agent/          log forwarder (Dockerfile, k8s manifests, .deb scripts)
-veritas-launcher/       Go service wrapper and license check
-veritas-license-portal/ vendor license portal (git submodule)
+veritas-agent/          log forwarder (Dockerfile, k8s manifests, .deb scripts, macOS build)
+veritas-launcher/       Go service wrapper and license check (Windows service)
 veritas-demo/           demo services and the simulation plan
-package/                .deb and .pkg packaging
+package/                .deb and .pkg packaging (server and agent)
 installer/              Windows installer script
 tools/                  license generation and fingerprint tools
+docs/                   guides (macOS, operations, onboarding) and docs/archive/
 .github/workflows/      CI, release, per-OS install tests
+(the license portal is a separate repository: veritas-license-portal)
 ```
 
 ### Data model (essentials)
@@ -134,14 +135,14 @@ tools/                  license generation and fingerprint tools
 - **Org config:** identifiers, fields (name, category, declared purpose, consent scope, retention days, source system, optional `data_since`) and linkage rules.
 
 ### Security
-- Passwords hashed with bcrypt; signed session tokens; login, setup and agent-registration endpoints are rate-limited.
+- Passwords hashed with bcrypt, with a policy (10+ characters, not common, no username or email) and a per-account lockout; signed session tokens that end when the password changes; login, setup and agent-registration endpoints are rate-limited.
 - Agents authenticate with a revocable bearer token issued from a one-time registration key.
-- TLS is automatic (self-signed by default, or supply your own certificate); sensitive evidence payloads are encrypted with a locally generated key.
+- TLS is automatic (self-signed by default, or install your own certificate with `veritas install-cert`); sensitive evidence payloads are encrypted with a locally generated key; on macOS the logs are private and the program folder belongs to root.
 - Role checks are enforced on the server side (covered by the RBAC tests); the browser cannot grant itself access by changing the organisation or role it sends.
 - PII is masked in API responses and filtered from the server's own logs.
 
 ### Licensing
-The vendor signs `{org, tier, issued, expiry, optional fingerprint}` with a private key that never leaves the vendor. The product embeds only the public key. On Linux the fingerprint is `v2:` plus a hash of the machine's `/etc/machine-id` (disk serial as fallback), so it does not change when the server is renamed or its network changes. A machine-bound license only runs on the machine it was issued for.
+The vendor signs `{org, tier, issued, expiry, optional fingerprint}` with a private key that never leaves the vendor. The product embeds only the public key. On Linux the fingerprint is `v2:` plus a hash of the machine's `/etc/machine-id` (disk serial as fallback), and on macOS `v2:` plus a hash of the hardware UUID, so it does not change when the machine is renamed or its network changes. A machine-bound license only runs on the machine it was issued for. Each license also carries a unique id that ties the file to its record in the portal.
 
 ---
 
@@ -208,7 +209,7 @@ A worked scenario for a fictional company, **Acme Retail**, which runs an order 
 
 ### Day 1: install the server
 1. Install the package: `sudo apt install ./veritas_<version>_amd64.deb`. The installer prints the machine fingerprint.
-2. Send that fingerprint to the vendor. The vendor issues a license in the portal and sends back `acme.vlic`.
+2. Send that fingerprint to the vendor (`veritas fingerprint`). The vendor issues a license in the portal and sends back `acme.vlic`.
 3. `sudo veritas license acme.vlic`. The service starts after a minute and the dashboard is available.
 4. Put the reverse proxy in front, or replace the self-signed certificate with one from Acme's internal CA.
 5. Open `/setup`, enter the one-time setup code from `sudo veritas setup-code` (it proves you have access to the server), create the first administrator, then add users with roles: the DPO as COMPLIANCE_ADMIN, the analysts as AUDITOR, and management as VIEWER.
@@ -226,7 +227,7 @@ Each agent shows up as ACTIVE with a heartbeat. If a host is retired or compromi
 
 ### Week 1: tune and operate
 - Run in observation mode: review the first violations, fix the applications that log personal data, and correct the org config where the policy was too strict or too loose.
-- Schedule backups (the backup command and API exist) and periodic chain verification; point monitoring at `/health` and `/ready` and collect the service logs.
+- Backups run daily by themselves, with a chain check each time; copy them off the machine (`sudo veritas backup`, `restore` and `verify-backup` are there when needed). Point monitoring at `/health` and `/ready` and collect the service logs.
 - The DPO exports the audit report when needed; the hash chain proves the records were not changed.
 
 ### Ongoing

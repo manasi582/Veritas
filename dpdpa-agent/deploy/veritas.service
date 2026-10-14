@@ -30,7 +30,7 @@ StandardError=journal
 SyslogIdentifier=veritas
 
 # Memory cap — spaCy's en_core_web_lg model uses ~400 MB.
-# 800 M gives comfortable headroom on a Raspberry Pi 4 (4 GB).
+# 800 M gives comfortable headroom on a 4 GB machine.
 MemoryMax=800M
 
 [Install]
