@@ -9,7 +9,7 @@ Veritas is an on-premise compliance monitoring platform for India's Digital Pers
 4. [How it works](#4-how-it-works)
 5. [Example: deploying in a real company](#5-example-deploying-in-a-real-company)
 
-Related documents: `README.md` (start here), `INSTALL.md` (install steps, all platforms), `docs/MACOS.md`, `docs/OPERATIONS.md` (running it), `docs/CUSTOMER_ONBOARDING.md` (the vendor's runbook), `docs/ENTERPRISE_TELEMETRY_SPEC.md` (the intended enterprise agent and telemetry model), `IMPLEMENTATION_ORDER.md` (what was done and what is open), `veritas-demo/SIMULATION_PLAN.md`, and `docs/archive/` (historical planning documents).
+Related documents: `README.md` (start here), `INSTALL.md` (install steps, all platforms), `docs/MACOS.md`, `docs/OPERATIONS.md` (running it), `docs/CUSTOMER_ONBOARDING.md` (the vendor's runbook), `docs/ENTERPRISE_TELEMETRY_SPEC.md` (the intended enterprise agent and telemetry model), `IMPLEMENTATION_ORDER.md` (what was done and what is open), and `veritas-demo/SIMULATION_PLAN.md`.
 
 ---
 
@@ -124,7 +124,7 @@ veritas-demo/           demo services and the simulation plan
 package/                .deb and .pkg packaging (server and agent)
 installer/              Windows installer script
 tools/                  license generation and fingerprint tools
-docs/                   guides (macOS, operations, onboarding) and docs/archive/
+docs/                   guides (macOS, operations, onboarding, telemetry spec)
 .github/workflows/      CI, release, per-OS install tests
 (the license portal is a separate repository: veritas-license-portal)
 ```

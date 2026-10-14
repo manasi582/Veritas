@@ -39,7 +39,7 @@ Done and tested: fingerprint validation (`v2:` + 64 hex, or legacy 64 hex) befor
 **Verified against the real Supabase project (2026-10-14):** 16-step end-to-end run (issue, duplicate refused, bad fingerprint refused, list without license text, download identical, reissue marks the old record Replaced, no double replace, audit rows, delete record keeps history) all passed; a license issued by the portal for this Mac is accepted by `license.py`; the public (anon) key is refused (401) for read, insert, update and delete on both tables. Found on the way: a reissue is several database calls, so a process that dies between saving the new license and marking the old one leaves two active licenses (left as a known limitation until it is made a single database function). Secrets had been pasted into the tracked `.env.local.example`; moved to the ignored `.env.local` before any commit.
 Done 2026-10-14: portal pushed to its own repo (github.com/shreyaaassss/veritas-license-portal, commit eb1a42a) and Vercel built it; step 9 resolved as **separate repositories**: the submodule link and `.gitmodules` were removed from this repo and the folder is git-ignored here (it stays on the owner's disk as its own clone). Still needed: set the four variables in the Vercel project (ADMIN_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY, VERITAS_PRIVATE_KEY; until then the live portal answers 503 "ADMIN_SECRET must be set", which is the intended fail-closed behaviour), redeploy, a live end-to-end test, and the separate CI signing key.
 
-Left aside for now (your call): revocation, renewal/reissue, multi-user login, license id, tier limits. All are listed in `docs/archive/LICENSE_PORTAL_REVIEW.md`.
+Left aside for now (your call): revocation, renewal/reissue, multi-user login, license id, tier limits. All were listed in the portal review of 2026-10-05, which is no longer in the repository (see the git history); the decisions taken are recorded below.
 
 ## Milestone 3: Architecture changes (after Milestone 1 passes)
 
@@ -132,7 +132,7 @@ The first version of this phase mixed polish with items that need measurements o
 
 ### Phase E: Housekeeping
 
-- ~~Remove Raspberry Pi wording from docs and install scripts~~ Done 2026-10-14: removed from the install-from-source scripts and their README; the old planning documents that mention it were moved to `docs/archive/` as history. `docs/ENTERPRISE_TELEMETRY_SPEC.md` keeps the decision itself (enterprise software, not an appliance requirement).
+- ~~Remove Raspberry Pi wording from docs and install scripts~~ Done 2026-10-14: removed from the install-from-source scripts and their README; the old planning documents that mentioned it were deleted from the repository (they remain in the git history). `docs/ENTERPRISE_TELEMETRY_SPEC.md` keeps the decision itself (enterprise software, not an appliance requirement).
 - ~~Update `PROJECT_OVERVIEW.md` and `INSTALL.md`~~ Done 2026-10-14, together with a new `README.md`, `docs/MACOS.md` and `docs/CUSTOMER_ONBOARDING.md`.
 - ~~Store the enterprise telemetry spec in the repo~~ Done: `docs/ENTERPRISE_TELEMETRY_SPEC.md`.
 
@@ -184,7 +184,7 @@ Backlog from this milestone: a macOS settings file that survives upgrades (like 
 | Support email | No support mailbox exists yet. The product says `support@veritas.io` (license errors in `license.py`, `license.go`, `tools/fingerprint.py`) and the `.deb` control file says `support@veritas.app`. Create the real address, then replace all of them with one value (ideally one constant). |
 | CI signing key | CI tests sign licenses with the production private key stored in the `VERITAS_PRIVATE_KEY_B64` secret. Move to a separate test keypair and a test build that embeds its public key. |
 | Reissue of old licenses | Test licenses from before v2 are invalid on Linux by design. No customer licenses exist, so nothing to migrate. |
-| Portal: revocation, renewal/reissue, license id, multi-user login, tier limits | Deferred by decision; see `docs/archive/LICENSE_PORTAL_REVIEW.md`. |
+| Portal: revocation, renewal/reissue, license id, multi-user login, tier limits | Decided 2026-10-13: no real revocation (the portal says "Delete record"), tier stays informational, one hardened shared admin secret. Reissue and the license id are done. |
 | Go launcher gofmt | `license.go` and `main_linux.go` already fail `gofmt -l` (comment formatting). Cosmetic. |
 | Docker log source reconnect | `tail_docker` ends silently when the container restarts or the stream drops (the source is now shown as "error: log stream ended" in the dashboard, but it is not re-attached). Add a reconnect loop with backoff. |
 | Agent API org scoping elsewhere | After the agent-management fix, audit the remaining routes that take `org_id` in a query or body rather than the path for the same missing membership check. |

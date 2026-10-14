@@ -66,7 +66,7 @@ package/                .deb and .pkg packaging (server and agent) and their ins
 installer/              Windows installer script
 tools/                  license generation and fingerprint tools
 veritas-demo/           simulated services and the plan for a simulated enterprise environment
-docs/                   guides (macOS, operations, onboarding, telemetry spec) and docs/archive/
+docs/                   guides: macOS, operations, onboarding, telemetry spec, Ubuntu test checklist
 .github/workflows/      CI, the release build and the per-platform install tests
 INSTALL.md              installation guide
 PROJECT_OVERVIEW.md     status, architecture and how it works
