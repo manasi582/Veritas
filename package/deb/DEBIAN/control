@@ -1,7 +1,7 @@
 Package: veritas
 Version: 1.0.0
 Architecture: amd64
-Maintainer: Veritas <support@veritas.app>
+Maintainer: Veritas <support@veritas.io>
 Depends: systemd
 Recommends: curl
 Section: utils

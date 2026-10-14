@@ -101,7 +101,7 @@ The service restarts itself only after a crash. A problem that restarting cannot
 |---|---|
 | Program | `/opt/veritas/` (owned by root) |
 | Data: databases, license, secrets, certificates, backups | `/var/lib/veritas/` (private to the service account `_veritas`) |
-| Logs | `/var/log/veritas/veritas.log` and `veritas-error.log` (private; read with `sudo veritas logs`) |
+| Logs | `/var/log/veritas/veritas-app.log` (the server's own log) plus `veritas.log` and `veritas-error.log` (start-up and crash output). All private; read with `sudo veritas logs` |
 | Service definition | `/Library/LaunchDaemons/com.veritas.daemon.plist` |
 | Command | `/usr/local/bin/veritas` |
 
@@ -251,5 +251,5 @@ How it behaves:
 
 - Apple silicon only; packages are not signed or notarized by Apple.
 - Server settings need re-applying after an upgrade (see above).
-- Log files in `/var/log/veritas` are not rotated yet; they grow until you remove or truncate them.
+- The server rotates its own log (10 MB at a time, 5 compressed copies kept). The agent's log (`/var/log/veritas-agent/agent.log`) is not rotated yet.
 - The Mac server is tested on a clean Apple-silicon machine for install, license, upgrade over the same version, backup and restore, and uninstall. Long-running behavior (weeks of uptime, a sleeping laptop) has not been measured yet.

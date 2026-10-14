@@ -287,11 +287,25 @@ jobs:
       - name: Strip v-prefix from tag for filenames
         run: echo "VER=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
 
+      - uses: actions/checkout@v4
+
+      - name: What's new (from CHANGELOG.md)
+        id: changelog
+        run: |
+          # the section for this release; a release with no entry yet gets a pointer to the file
+          notes=$(awk -v v="$VER" '$0 ~ "^## "v"( |$)" {f=1; next} /^## / {f=0} f' CHANGELOG.md)
+          [ -n "$notes" ] || notes="See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)."
+          { echo "notes<<CHANGELOG_EOF"; echo "$notes"; echo "CHANGELOG_EOF"; } >> "$GITHUB_OUTPUT"
+
       - name: Update release with install instructions
         uses: softprops/action-gh-release@v2
         with:
           body: |
             ## Veritas DPDPA Compliance Platform ${{ github.ref_name }}
+
+            ### What's new
+
+            ${{ steps.changelog.outputs.notes }}
 
             ### Quick Install
 

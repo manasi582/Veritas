@@ -6,8 +6,6 @@ VERSION=$(dpkg-query -W -f='${Version}' veritas 2>/dev/null || echo unknown)
 URL="https://$(hostname -f 2>/dev/null || hostname):8000"
 
 
-# The backup file must be readable by the service account (it runs the restore). A file in a
-# private folder (for example /root) is copied to a temporary place first.
 # A bare file name, as printed by `veritas backups`, means a file in the backups folder.
 resolve_backup() {
   if [ -f "$1" ] || [ -z "$1" ]; then echo "$1"
@@ -15,11 +13,22 @@ resolve_backup() {
   else echo "$1"; fi
 }
 
+# The backup file must be readable by the service account (it runs the restore). A file in a
+# private folder (for example /root) is copied to a temporary place first.
 stage_backup() {   # $1 = file; prints the path to use
   if runuser -u veritas -- test -r "$1" 2>/dev/null; then echo "$1"; return; fi
   mkdir -p "$DATA_DIR/tmp" && chown veritas:veritas "$DATA_DIR/tmp"
   local tmp="$DATA_DIR/tmp/restore-input-$$.zip"
   cp "$1" "$tmp" && chown veritas:veritas "$tmp" && chmod 600 "$tmp" && echo "$tmp"
+}
+
+wait_until_up() {   # prints up | failed | starting
+  for _ in $(seq 1 90); do
+    sleep 1
+    if systemctl is-failed --quiet veritas; then echo failed; return; fi
+    if curl -sk --max-time 3 "https://localhost:8000/health" 2>/dev/null | grep -q '"status":"ok"'; then echo up; return; fi
+  done
+  echo starting
 }
 
 need_root() {
@@ -166,8 +175,22 @@ case "$1" in
     if [ "$WAS_RUNNING" = yes ]; then
       echo "Starting Veritas..."; systemctl start veritas
     fi
-    if [ $RC -eq 0 ]; then echo "Restore complete."; else echo "Restore FAILED: the previous data was left in place." >&2; fi
-    exit $RC
+    if [ $RC -ne 0 ]; then echo "Restore FAILED: the previous data was left in place." >&2; exit $RC; fi
+    if [ "$WAS_RUNNING" = yes ]; then
+      echo "Waiting for Veritas to answer (the language model takes up to a minute to load)..."
+      case "$(wait_until_up)" in
+        up) echo "Restore complete. Veritas is running." ;;
+        failed)
+          echo "The data was restored, but Veritas did not start. Last log lines:" >&2
+          journalctl -u veritas -n 15 --no-pager >&2
+          echo "The previous data is kept in $DATA_DIR/backups/pre-restore-*." >&2
+          exit 1 ;;
+        *) echo "Restore complete. Veritas is still starting: check with 'veritas status'." ;;
+      esac
+    else
+      echo "Restore complete. Veritas was not running; start it with: sudo veritas start"
+    fi
+    exit 0
     ;;
 
   reset-password)

@@ -7,6 +7,7 @@ RUNTIME=/opt/veritas/veritas-runtime
 DATA_DIR=/var/lib/veritas
 LOG=/var/log/veritas/veritas.log
 ERRLOG=/var/log/veritas/veritas-error.log
+APPLOG=/var/log/veritas/veritas-app.log   # the server's own rotating log (the two above carry start-up and crash output)
 SVC_USER=_veritas
 VERSION=$(cat /opt/veritas/VERSION 2>/dev/null || echo unknown)
 HOST=$(hostname 2>/dev/null || echo localhost)
@@ -79,7 +80,7 @@ report_start() {
       ;;
     failed)
       echo "  Status: NOT running. Last log lines:" >&2
-      tail -n 15 "$ERRLOG" "$LOG" 2>/dev/null >&2
+      tail -n 15 "$ERRLOG" "$LOG" "$APPLOG" 2>/dev/null >&2
       exit 1
       ;;
     *)
@@ -115,7 +116,7 @@ case "$1" in
     fi
     [ "$state" = running ] || exit 3
     ;;
-  logs)     need_root logs; tail -n 50 -f "$LOG" "$ERRLOG" ;;
+  logs)     need_root logs; tail -n 50 -f "$APPLOG" "$LOG" "$ERRLOG" ;;
   check)
     need_root check
     as_service --check
@@ -220,8 +221,22 @@ case "$1" in
     as_service --restore "$F" "${EXTRA[@]}"; RC=$?
     cleanup
     if [ "$WAS_RUNNING" = yes ]; then echo "Starting Veritas..."; start_service; fi
-    if [ $RC -eq 0 ]; then echo "Restore complete."; else echo "Restore FAILED: the previous data was left in place." >&2; fi
-    exit $RC
+    if [ $RC -ne 0 ]; then echo "Restore FAILED: the previous data was left in place." >&2; exit $RC; fi
+    if [ "$WAS_RUNNING" = yes ]; then
+      echo "Waiting for Veritas to answer (the language model takes up to a minute to load)..."
+      case "$(wait_until_up)" in
+        up) echo "Restore complete. Veritas is running." ;;
+        failed)
+          echo "The data was restored, but Veritas did not start. Last log lines:" >&2
+          tail -n 15 "$ERRLOG" "$LOG" "$APPLOG" 2>/dev/null >&2
+          echo "The previous data is kept in $DATA_DIR/backups/pre-restore-*." >&2
+          exit 1 ;;
+        *) echo "Restore complete. Veritas is still starting: check with 'veritas status'." ;;
+      esac
+    else
+      echo "Restore complete. Veritas was not running; start it with: sudo veritas start"
+    fi
+    exit 0
     ;;
 
   reset-password)

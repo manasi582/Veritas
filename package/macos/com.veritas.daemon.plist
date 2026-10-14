@@ -16,6 +16,9 @@
         <string>/var/lib/veritas</string>
         <key>TMPDIR</key>
         <string>/var/lib/veritas/tmp</string>
+        <!-- the server rotates its own log here (launchd would keep writing to a rotated file) -->
+        <key>VERITAS_LOG_DIR</key>
+        <string>/var/log/veritas</string>
     </dict>
 
     <key>WorkingDirectory</key>

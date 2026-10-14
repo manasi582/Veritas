@@ -40,10 +40,9 @@ except ImportError:
 
 import uvicorn
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+from log_setup import configure_logging
+
+configure_logging()
 logger = logging.getLogger("pipeline")
 
 # Exit status used when the license is missing/invalid (see veritas.service).

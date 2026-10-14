@@ -96,7 +96,7 @@ Latest release: see the [releases page](https://github.com/shreyaaassss/Veritas/
 Not done yet, and worth knowing before a large deployment:
 
 - **Load and long-run behavior is untested.** One server process with SQLite is suitable for a pilot and mid-sized deployments; the planned ingest queue and worker pool are not built.
-- The macOS packages are **not signed or notarized** (install with `sudo installer`, see [docs/MACOS.md](docs/MACOS.md)), and macOS log rotation and a settings file that survives upgrades are open.
+- The macOS packages are **not signed or notarized** (install with `sudo installer`, see [docs/MACOS.md](docs/MACOS.md)), and a macOS settings file that survives upgrades is open.
 - **Windows** is installed and tested in CI only; it still uses the older machine fingerprint and has no agent package.
 - No outside security review has been done.
 - License revocation is not possible by design (licenses are files checked offline and expire by date).

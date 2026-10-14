@@ -43,7 +43,7 @@ Last updated: 2026-10-14. Latest release: **v1.0.22**.
 | Load and long-run testing | Planned: heavy log volume, weeks of uptime, SQLite limits. Detection currently runs inside the `/events` request, so heavy bursts from many agents are not proven |
 | Ingest queue and worker pool | Planned, after the baseline from load testing |
 | Simulated enterprise environment | Planned (`veritas-demo/SIMULATION_PLAN.md`); a teammate will build it |
-| macOS: log rotation, a settings file that survives upgrades | Open (see `IMPLEMENTATION_ORDER.md`); signing and notarization parked until an Apple Developer account exists |
+| macOS: a settings file that survives upgrades | Open (see `IMPLEMENTATION_ORDER.md`); signing and notarization parked until an Apple Developer account exists |
 | Windows: fingerprint v2, an agent package | Open |
 | Sanitization mode B | Needs design decisions |
 | Offline hardening | Planned: bundle fonts and the PDF library locally |
