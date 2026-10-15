@@ -206,7 +206,7 @@ Scope: everything short of Windows, long-run testing and Mac notarization. Order
 
 | Phase | What | Status |
 |---|---|---|
-| 1. Release hygiene | Mac log rotation, restore waits for the server, bare backup names, changelog feeding the release notes, one support address | In progress (see CHANGELOG.md, Unreleased) |
+| 1. Release hygiene | Mac log rotation, restore waits for the server, bare backup names, changelog feeding the release notes, one support address | **Done**, released as 1.0.23 (support address still a placeholder: needs the real mailbox) |
 | 2. Upgrade safety | Backup before upgrade, downgrade guard, N-1 to N upgrade test in CI (Ubuntu and Mac), schema versioning with a tested migration, macOS settings file that survives upgrades | Open |
 | 3. Security hardening | Dependency and secret scanning in CI, SBOM, checksums and signed packages, stricter content-security-policy (no `unsafe-inline`), threat model and OWASP-style tests, optional administrator two-factor sign-in (decision needed), separate CI signing key, review package for an outside reviewer | Open |
 | 4. Operability | `veritas support-bundle` (redacted), alerts (webhook/email) for HIGH findings, failed backups and expiring license, certificate or disk, a metrics endpoint, data-growth handling and an evidence retention design | Open |
