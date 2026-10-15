@@ -29,6 +29,14 @@ fi
 systemctl daemon-reload
 systemctl enable veritas
 
+# An upgrade stopped the service (prerm) and must bring it back, also when the new package was
+# refused (abort-upgrade). A first install waits for a license instead.
+if { [ "$1" = "configure" ] && [ -n "$2" ]; } || [ "$1" = "abort-upgrade" ]; then
+    if [ -f /var/lib/veritas/veritas.vlic ]; then
+        systemctl start veritas || true
+    fi
+fi
+
 echo ""
 echo "Veritas DPDPA Compliance Platform installed successfully!"
 echo ""

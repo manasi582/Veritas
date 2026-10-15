@@ -26,6 +26,8 @@ mkdir -p /tmp/veritas-deb/var/log/veritas
 
 # Set permissions on control scripts
 chmod 755 /tmp/veritas-deb/DEBIAN/postinst
+chmod 755 /tmp/veritas-deb/DEBIAN/preinst
+sed -i "s/@VERSION@/$VERSION/" /tmp/veritas-deb/DEBIAN/preinst   # the release the script installs
 chmod 755 /tmp/veritas-deb/DEBIAN/prerm
 chmod 755 /tmp/veritas-deb/DEBIAN/postrm
 chmod 755 /tmp/veritas-deb/usr/bin/veritas

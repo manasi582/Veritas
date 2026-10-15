@@ -132,7 +132,7 @@ sudo installer -pkg ~/Downloads/veritas-NEW.pkg -target /
 veritas version
 ```
 
-Make a backup first if you want a way back: `sudo veritas backup`.
+The upgrade makes a backup of its own first (see [OPERATIONS.md](OPERATIONS.md#upgrading)), and refuses to install an older release over a newer one.
 
 ### Uninstalling
 

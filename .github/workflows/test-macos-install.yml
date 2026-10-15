@@ -307,6 +307,64 @@ jobs:
           if id _veritas >/dev/null 2>&1; then echo "service user left behind"; exit 1; fi
           if curl -sk --max-time 3 "$VERITAS_URL/health" >/dev/null 2>&1; then echo "server still answering"; exit 1; fi
 
+      # ── Upgrades: from the previous release, and the downgrade guard ─────
+      - name: Upgrade from the previous release keeps everything
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPGRADE_STATE: /tmp/upgrade-state.json
+          VERITAS_ORG: upgrade_org
+        run: |
+          up() { for i in $(seq 1 60); do curl -sk --max-time 3 "$VERITAS_URL/health" | grep -q '"status":"ok"' && return 0; sleep 5; done; return 1; }
+          PREV=$(gh api "repos/${{ github.repository }}/releases" --jq '[.[] | select(.draft == false and .tag_name != "'"$GITHUB_REF_NAME"'") | .tag_name][0]')
+          test -n "$PREV" || { echo "no previous release found"; exit 1; }
+          echo "previous release: $PREV"
+          curl -fL --retry 3 -o /tmp/prev.pkg "https://github.com/${{ github.repository }}/releases/download/$PREV/veritas_${PREV#v}_arm64.pkg"
+          sudo installer -pkg /tmp/prev.pkg -target /
+          rm -f /tmp/prev.pkg
+          test "$(veritas version)" = "Veritas ${PREV#v}" || { echo "old release did not install: $(veritas version)"; exit 1; }
+          sudo veritas license /tmp/this-machine.vlic
+          up || { echo "old release did not start"; sudo tail -40 /var/log/veritas/veritas-error.log; exit 1; }
+          export VERITAS_SETUP_CODE=$(sudo veritas setup-code | grep -E '^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$')
+          test -n "$VERITAS_SETUP_CODE" || { echo "no setup code"; exit 1; }
+          python .github/scripts/upgrade_check.py seed
+          BEFORE=$(sudo veritas backups | grep -c veritas-backup || true)
+          # install the release built from this commit over it
+          OUT=$(sudo installer -pkg "dist/veritas_${PKG_VERSION}_arm64.pkg" -target / 2>&1) || { echo "$OUT"; exit 1; }
+          test "$(veritas version)" = "Veritas $PKG_VERSION" || { echo "upgrade did not take: $(veritas version)"; exit 1; }
+          up || { echo "new release did not start after the upgrade"; sudo tail -40 /var/log/veritas/veritas-error.log; exit 1; }
+          python .github/scripts/upgrade_check.py verify
+          AFTER=$(sudo veritas backups | grep -c veritas-backup || true)
+          [ "$AFTER" -gt "$BEFORE" ] || { echo "no backup was made before the upgrade ($BEFORE before, $AFTER after)"; exit 1; }
+          sudo veritas verify-backup "$(sudo veritas backups | awk 'NR==1{print $1}')" | grep -q "VERIFIED OK"
+          sudo veritas uninstall --purge-data
+
+      - name: Downgrade is refused unless asked for, and the data survives
+        env:
+          UPGRADE_STATE: /tmp/upgrade-state.json
+          VERITAS_ORG: upgrade_org
+        run: |
+          up() { for i in $(seq 1 60); do curl -sk --max-time 3 "$VERITAS_URL/health" | grep -q '"status":"ok"' && return 0; sleep 5; done; return 1; }
+          # two numeric releases built from the same program
+          for v in 9.0.1 9.0.2; do bash package/macos/build-pkg.sh dpdpa-agent/dist/veritas-runtime "$v" arm64 >/dev/null; done
+          sudo installer -pkg dist/veritas_9.0.2_arm64.pkg -target /
+          sudo veritas license /tmp/this-machine.vlic
+          up || { echo "9.0.2 did not start"; exit 1; }
+          export VERITAS_SETUP_CODE=$(sudo veritas setup-code | grep -E '^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$')
+          python .github/scripts/upgrade_check.py seed
+          # an older release over a newer one is refused, and nothing is stopped or changed
+          if sudo installer -pkg dist/veritas_9.0.1_arm64.pkg -target / >/tmp/downgrade.out 2>&1; then
+            echo "a downgrade was accepted"; cat /tmp/downgrade.out; exit 1
+          fi
+          test "$(cat /opt/veritas/VERSION)" = "9.0.2" || { echo "the refused downgrade changed the program"; exit 1; }
+          curl -sk --max-time 3 "$VERITAS_URL/health" | grep -q '"status":"ok"' || { echo "the refused downgrade stopped the service"; exit 1; }
+          # on purpose: the marker file allows exactly one downgrade
+          sudo touch /var/lib/veritas/ALLOW_DOWNGRADE
+          sudo installer -pkg dist/veritas_9.0.1_arm64.pkg -target /
+          test "$(cat /opt/veritas/VERSION)" = "9.0.1" || { echo "the allowed downgrade did not install"; exit 1; }
+          if sudo test -e /var/lib/veritas/ALLOW_DOWNGRADE; then echo "the marker was not consumed"; exit 1; fi
+          up || { echo "service did not start after the downgrade"; sudo tail -40 /var/log/veritas/veritas-error.log; exit 1; }
+          python .github/scripts/upgrade_check.py verify
+
       - name: Attach screenshots
         if: always()
         uses: actions/upload-artifact@v4

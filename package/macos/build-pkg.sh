@@ -20,6 +20,7 @@ cp package/macos/com.veritas.daemon.plist /tmp/veritas-pkg-root/opt/veritas/
 cp package/macos/scripts/postinstall /tmp/veritas-pkg-scripts/
 cp package/macos/scripts/preinstall /tmp/veritas-pkg-scripts/
 chmod 755 /tmp/veritas-pkg-scripts/*
+sed -i '' "s/@VERSION@/$VERSION/" /tmp/veritas-pkg-scripts/preinstall   # the release the script installs
 
 # Install veritas CLI
 mkdir -p /tmp/veritas-pkg-root/usr/local/bin

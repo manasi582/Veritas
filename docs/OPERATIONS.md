@@ -48,6 +48,19 @@ What `restore` does, so it is safe to use:
 
 Moving to a new machine: install Veritas there, install a license issued for **that** machine's fingerprint (`veritas fingerprint`), then `sudo veritas restore <file>`. The secrets that protect the databases travel inside the backup, so the restored data stays readable.
 
+## Upgrading
+
+Install the newer package over the old one (`sudo apt install ./veritas_<version>_amd64.deb`, or `sudo installer -pkg veritas_<version>_arm64.pkg -target /` on a Mac). Your data, license and accounts are kept.
+
+What the upgrade does for you:
+
+- **It backs up first.** Before anything is replaced, it makes a backup with the release that is still installed. The line "backing up your data before upgrading" shows it, and `sudo veritas backups` lists it. If that backup fails the upgrade goes on (your data is not touched by an upgrade) and the failure is printed.
+- **It starts the service again** when it is done (a first install waits for a license instead).
+- **It refuses to install an older release over a newer one.** A newer release can change how data is stored, and an older one may not understand it. The message names both versions. To go back on purpose, run `sudo touch /var/lib/veritas/ALLOW_DOWNGRADE` and install the older package again; the marker allows exactly one downgrade. The safest way back is to restore a backup that the older release made.
+- **If an older program is started on newer data** (for example after a manual file copy) it stops once with "DATA FORMAT ERROR" and says what to do, instead of running on data it cannot read.
+
+To go back after a bad upgrade: install the previous package with the marker above, then `sudo veritas restore <the backup the upgrade made>`.
+
 ## TLS certificate
 
 Veritas creates a self-signed certificate on first start (valid about 2 years). Browsers show a warning and agents need the certificate (`VERITAS_CA_CERT`). To use a certificate from your own CA or a public CA:

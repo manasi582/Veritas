@@ -1,10 +1,56 @@
 #!/bin/bash
-# Stop existing Veritas service before upgrade (graceful, never fails)
+# Veritas macOS pre-install script. Stops the service for the upgrade and, when Veritas is
+# already installed:
+#   1. refuses to install an older release over a newer one, unless the administrator asked
+#   2. backs up the data with the release that is still installed, so there is a way back
 PLIST=/Library/LaunchDaemons/com.veritas.daemon.plist
+NEW_VERSION="@VERSION@"
+OLD_VERSION=$(cat /opt/veritas/VERSION 2>/dev/null)
+DATA_DIR=/var/lib/veritas
+RUNTIME=/opt/veritas/veritas-runtime
+SVC_USER=_veritas
 
-# Try modern bootout first, then legacy unload
+# a < b for dotted release numbers (1.0.9 < 1.0.10); anything that is not numeric never compares
+version_lt() {
+  case "$1$2" in *[!0-9.]*|"") return 1;; esac
+  local IFS=. i a b
+  read -ra a <<<"$1"; read -ra b <<<"$2"
+  for i in 0 1 2 3; do
+    [ "${a[i]:-0}" -lt "${b[i]:-0}" ] && return 0
+    [ "${a[i]:-0}" -gt "${b[i]:-0}" ] && return 1
+  done
+  return 1
+}
+
+# 1. Downgrade guard. Allow it on purpose with:  sudo touch /var/lib/veritas/ALLOW_DOWNGRADE
+if [ -n "$OLD_VERSION" ] && version_lt "$NEW_VERSION" "$OLD_VERSION"; then
+  if [ -e "$DATA_DIR/ALLOW_DOWNGRADE" ]; then
+    rm -f "$DATA_DIR/ALLOW_DOWNGRADE"
+    echo "Veritas: installing $NEW_VERSION over $OLD_VERSION as you asked (ALLOW_DOWNGRADE)."
+  else
+    echo "Veritas: refusing to install $NEW_VERSION over the newer $OLD_VERSION." >&2
+    echo "  The newer release may have changed your data in a way $NEW_VERSION cannot read." >&2
+    echo "  To go back anyway run:  sudo touch $DATA_DIR/ALLOW_DOWNGRADE  and install again." >&2
+    exit 1
+  fi
+fi
+
+# Stop the service (graceful, never fails)
 launchctl bootout system "$PLIST" 2>/dev/null || \
 launchctl unload -w "$PLIST" 2>/dev/null || \
 true
+
+# 2. Back up before changing anything. A failed backup is reported but does not block the upgrade.
+if [ -x "$RUNTIME" ] && { [ -f "$DATA_DIR/evidence.db" ] || [ -f "$DATA_DIR/users.db" ]; } \
+   && id "$SVC_USER" >/dev/null 2>&1; then
+  echo "Veritas: backing up your data before upgrading to $NEW_VERSION ..."
+  mkdir -p "$DATA_DIR/tmp" && chown "$SVC_USER":staff "$DATA_DIR/tmp" 2>/dev/null
+  if OUT=$(sudo -u "$SVC_USER" env VERITAS_DATA_DIR="$DATA_DIR" TMPDIR="$DATA_DIR/tmp" "$RUNTIME" --backup-now 2>&1); then
+    echo "  $(echo "$OUT" | tail -1)"
+  else
+    echo "  WARNING: the pre-upgrade backup failed; continuing. Details:" >&2
+    echo "$OUT" | tail -3 >&2
+  fi
+fi
 
 exit 0

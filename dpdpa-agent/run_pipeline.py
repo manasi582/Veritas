@@ -230,6 +230,15 @@ def main() -> None:
         # so a missing/invalid license is reported once instead of crash-looping.
         raise SystemExit(LICENSE_EXIT_CODE)
 
+    # ---- Data written by a newer release: stop with a clear reason instead of damaging it ----
+    from schema_guard import SchemaTooNew, check_and_stamp
+    try:
+        check_and_stamp(__import__("runtime_paths").data_root())
+    except SchemaTooNew as e:
+        border = "=" * 60
+        print(f"\n{border}\nDATA FORMAT ERROR\n{border}\n{e}\n{border}\n")
+        raise SystemExit(LICENSE_EXIT_CODE)   # not fixable by restarting: report once, do not loop
+
     # ---- First-run: copy seed org configs out of the PyInstaller bundle ----
     from runtime_paths import bundle_root, data_root, is_bundled
     if is_bundled():

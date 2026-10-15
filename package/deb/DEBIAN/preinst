@@ -1,0 +1,43 @@
+#!/bin/bash
+# Veritas Linux pre-install script. On an upgrade:
+#   1. refuses to install an older release over a newer one (the newer release may have changed
+#      the data in a way the older one cannot read), unless the administrator asked for it
+#   2. backs up the data with the release that is still installed, so there is a way back
+# The service has already been stopped by the old package's prerm.
+set -e
+
+NEW_VERSION="@VERSION@"
+DATA_DIR=/var/lib/veritas
+RUNTIME=/opt/veritas/veritas-runtime
+
+[ "$1" = "upgrade" ] || exit 0
+OLD_VERSION="$2"
+
+# 1. Downgrade guard. Allow it on purpose with:  sudo touch /var/lib/veritas/ALLOW_DOWNGRADE
+if [ -n "$OLD_VERSION" ] && dpkg --compare-versions "$NEW_VERSION" lt "$OLD_VERSION"; then
+    if [ -e "$DATA_DIR/ALLOW_DOWNGRADE" ]; then
+        rm -f "$DATA_DIR/ALLOW_DOWNGRADE"
+        echo "Veritas: installing $NEW_VERSION over $OLD_VERSION as you asked (ALLOW_DOWNGRADE)." >&2
+    else
+        echo "Veritas: refusing to install $NEW_VERSION over the newer $OLD_VERSION." >&2
+        echo "  The newer release may have changed your data in a way $NEW_VERSION cannot read." >&2
+        echo "  To go back anyway, restore a backup made by $NEW_VERSION after installing it, and run:" >&2
+        echo "    sudo touch $DATA_DIR/ALLOW_DOWNGRADE" >&2
+        echo "  then install this package again." >&2
+        exit 1
+    fi
+fi
+
+# 2. Back up before changing anything. A failed backup is reported, but does not block the upgrade
+#    (the daily backup and the data itself are untouched by an upgrade).
+if [ -x "$RUNTIME" ] && { [ -f "$DATA_DIR/evidence.db" ] || [ -f "$DATA_DIR/users.db" ]; } \
+   && id veritas >/dev/null 2>&1; then
+    echo "Veritas: backing up your data before upgrading to $NEW_VERSION ..."
+    if OUT=$(runuser -u veritas -- env VERITAS_DATA_DIR="$DATA_DIR" "$RUNTIME" --backup-now 2>&1); then
+        echo "  $OUT" | tail -1
+    else
+        echo "  WARNING: the pre-upgrade backup failed; continuing. Details:" >&2
+        echo "$OUT" | tail -3 >&2
+    fi
+fi
+exit 0
