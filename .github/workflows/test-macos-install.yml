@@ -148,6 +148,23 @@ jobs:
           if out=$(veritas setup-code 2>&1); then echo "setup-code worked without sudo"; exit 1; fi
           echo "$out" | grep -q "sudo" || { echo "no hint to use sudo: $out"; exit 1; }
 
+      - name: Support bundle holds diagnostics and no secrets
+        run: |
+          sudo veritas support-bundle /tmp/support.zip
+          python3 - <<'PY'
+          import zipfile
+          z = zipfile.ZipFile("/tmp/support.zip")
+          names = z.namelist()
+          for need in ("manifest.json", "license.json", "acceptance_check.json", "data_files.json", "settings.json"):
+              assert need in names, f"{need} missing from {names}"
+          assert not any(n.endswith((".db", ".key", ".vlic", ".pem", ".crt")) for n in names), names
+          text = b"".join(z.read(n) for n in names).decode("utf-8", "replace")
+          for forbidden in ("BEGIN PRIVATE KEY", "BEGIN RSA PRIVATE KEY", "BEGIN VERITAS LICENSE", "SQLite format"):
+              assert forbidden not in text, forbidden
+          print("support bundle ok:", names)
+          PY
+          sudo rm -f /tmp/support.zip
+
       - name: The server keeps its own log, which it rotates itself
         run: |
           # launchd keeps writing to a file that was rotated from outside, so the server rotates

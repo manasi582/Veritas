@@ -586,6 +586,13 @@ class EvidenceStore:
         cursor = self._conn.execute("SELECT COUNT(*) as n FROM evidence WHERE tenant_id = ?", (tenant_id,))
         return cursor.fetchone()["n"]
 
+    def count_by_status(self, tenant_id: str) -> dict:
+        """{remediation_status: number of findings} for tenant_id (cheap: no payload is read)."""
+        rows = self._conn.execute(
+            "SELECT remediation_status AS s, COUNT(*) AS n FROM evidence WHERE tenant_id = ? GROUP BY remediation_status",
+            (tenant_id,)).fetchall()
+        return {r["s"]: r["n"] for r in rows}
+
     # ------------------------------------------------------------------
     # Case Management (Phase 13)
     # ------------------------------------------------------------------

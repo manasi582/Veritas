@@ -49,6 +49,27 @@ logger = logging.getLogger("pipeline")
 LICENSE_EXIT_CODE = 78
 
 
+def _load_settings(path: Path) -> None:
+    """Put VERITAS_* settings from a config.env (Linux) or the service's .plist (macOS) into the environment."""
+    values = {}
+    try:
+        if path.suffix == ".plist":
+            import plistlib
+            with open(path, "rb") as f:
+                values = plistlib.load(f).get("EnvironmentVariables", {}) or {}
+        else:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    values[k.strip()] = v.strip().strip('"').strip("'")
+    except OSError:
+        return
+    for k, v in values.items():
+        if str(k).startswith("VERITAS_"):
+            os.environ.setdefault(k, str(v))
+
+
 def main() -> None:
     # Output to a pipe or file (the service log) is block-buffered by default, so the start-up
     # banner, which carries the setup code, could stay invisible for a long time. Flush per line.
@@ -83,6 +104,10 @@ def main() -> None:
         help="Install a company-issued TLS certificate and its private key and exit "
              "(restart the service afterwards).",
     )
+    parser.add_argument("--load-settings", metavar="FILE", help="Read VERITAS_* settings from a config.env or service .plist (for the command line tools).")
+    parser.add_argument("--test-alert", action="store_true", help="Send a test message through the configured alert channels and exit.")
+    parser.add_argument("--support-bundle", metavar="FILE", help="Write a support bundle (diagnostics, no secrets or customer data) and exit.")
+    parser.add_argument("--support-log", metavar="FILE", action="append", default=[], help="With --support-bundle: a log file to include (its recent lines, redacted).")
     parser.add_argument("--backup-now", action="store_true", help="Create a backup now and exit.")
     parser.add_argument("--list-backups", action="store_true", help="List the available backups and exit.")
     parser.add_argument("--verify-backup", metavar="FILE", help="Check a backup file's integrity and exit.")
@@ -208,6 +233,30 @@ def main() -> None:
                 print("RESTORE FAILED. Your current data was left as it was (or put back).", file=sys.stderr)
             raise SystemExit(0 if result["success"] else 1)
         return
+
+    if args.load_settings:
+        _load_settings(Path(args.load_settings))
+
+    if args.test_alert:
+        import alerts
+        if not alerts.any_configured():
+            print("No alert channel is configured. Set VERITAS_ALERT_WEBHOOK_URL, or VERITAS_ALERT_EMAIL_TO with "
+                  "VERITAS_SMTP_HOST (see OPERATIONS.md).", file=sys.stderr)
+            raise SystemExit(1)
+        results = alerts.send("[Veritas] Test alert", "This is a test message from Veritas. If you can read it, "
+                              "alerts reach you.", {"kind": "test"})
+        for channel, outcome in results.items():
+            print(f"  {channel}: {outcome}")
+        raise SystemExit(0 if all(v == "sent" for v in results.values()) else 1)
+
+    if args.support_bundle:
+        from support_bundle import build_bundle
+        try:
+            print(build_bundle(Path(args.support_bundle), log_files=[Path(p) for p in args.support_log]))
+        except OSError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            raise SystemExit(1)
+        raise SystemExit(0)
 
     if args.check:
         from production_check import print_report, run_checks

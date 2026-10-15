@@ -48,6 +48,45 @@ What `restore` does, so it is safe to use:
 
 Moving to a new machine: install Veritas there, install a license issued for **that** machine's fingerprint (`veritas fingerprint`), then `sudo veritas restore <file>`. The secrets that protect the databases travel inside the backup, so the restored data stays readable.
 
+## Telling people when something is wrong (alerts)
+
+Veritas can send a message when something needs a person, so nobody has to watch the dashboard. Set one or both channels in the service's settings (Linux: `/etc/veritas/config.env`, then `sudo veritas restart`; macOS: the `EnvironmentVariables` of the service definition, see MACOS.md):
+
+| Setting | Meaning |
+|---|---|
+| `VERITAS_ALERT_WEBHOOK_URL` | An incoming-webhook address (Slack, Microsoft Teams, Mattermost, or your own receiver). Veritas POSTs JSON: `{"text": "...", "veritas": {...}}`. |
+| `VERITAS_ALERT_EMAIL_TO` and `VERITAS_SMTP_HOST` | Recipients (comma separated) and the mail server. Optional: `VERITAS_SMTP_PORT` (587), `VERITAS_SMTP_USER`, `VERITAS_SMTP_PASSWORD`, `VERITAS_SMTP_FROM`, `VERITAS_SMTP_SECURITY` (`starttls`, `ssl` or `none`). |
+| `VERITAS_ALERT_MIN_SEVERITY` | `HIGH` (default), `MEDIUM` or `LOW`: the lowest severity of finding that is sent. A breach-notification candidate is always sent. |
+| `VERITAS_PUBLIC_URL` | For example `https://veritas.example.com:8000`: adds a link to the dashboard. |
+
+Check it: `sudo veritas test-alert` sends a test message and prints, for each channel, `sent` or the reason it failed.
+
+What is sent:
+
+- **New findings.** One message a minute per organization, however many findings arrived, with counts, rules, field names and violation numbers. Never a personal data value, an explanation text or a secret.
+- **Conditions that need action:** a failed scheduled backup, a broken evidence chain, an overdue backup, a license or TLS certificate that expires within 30 days, an invalid license, a disk with less than 10% free. Each is sent once, repeated after 24 hours while it lasts, and sent again if it returns after being fixed.
+
+A channel that fails (wrong address, mail server down) is logged and does not affect Veritas.
+
+## Monitoring (metrics)
+
+For your own monitoring system, Veritas serves metrics in the Prometheus text format at `GET /metrics`. It is **off** until you set `VERITAS_METRICS_TOKEN` (at least 16 characters, chosen by you); the request must carry `Authorization: Bearer <token>`. Example Prometheus scrape job:
+
+```yaml
+scrape_configs:
+  - job_name: veritas
+    scheme: https
+    tls_config: { insecure_skip_verify: true }   # or ca_file: with the server certificate
+    authorization: { credentials: "<your token>" }
+    static_configs: [{ targets: ["veritas.example.com:8000"] }]
+```
+
+Metrics: `veritas_info{version}`, `veritas_license_valid`, `veritas_license_days_remaining`, `veritas_tls_certificate_days_remaining`, `veritas_disk_free_percent`, `veritas_disk_free_bytes`, `veritas_database_bytes{database}`, `veritas_backup_last_ok`, `veritas_backup_age_seconds`, `veritas_evidence_chains_broken`, `veritas_agents{org,status}`, `veritas_findings{org,status}`, `veritas_alert_channel_configured{channel}`. Useful alerts: `veritas_license_days_remaining < 30`, `veritas_backup_age_seconds > 172800`, `veritas_evidence_chains_broken > 0`, `veritas_disk_free_percent < 10`.
+
+## Asking for help (support bundle)
+
+`sudo veritas support-bundle` writes one ZIP file (in the current folder, or the path you give) for your Veritas contact. It contains the release, license status, the acceptance check, disk space, the names and sizes of the data files, the settings in effect (secret values hidden) and the recent log lines with tokens, keys and personal identifiers removed. It **does not** contain a database, key, certificate, license file or password. Read it before you send it if you like: it is a plain ZIP of text files.
+
 ## Upgrading
 
 Install the newer package over the old one (`sudo apt install ./veritas_<version>_amd64.deb`, or `sudo installer -pkg veritas_<version>_arm64.pkg -target /` on a Mac). Your data, license and accounts are kept.

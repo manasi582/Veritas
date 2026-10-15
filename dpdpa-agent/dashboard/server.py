@@ -637,6 +637,20 @@ async def health():
     return {"status": "ok", "service": "veritas", "version": _API_VERSION}   # API version, not the release
 
 
+@app.get("/metrics", include_in_schema=True)
+async def metrics_endpoint(request: Request):
+    """
+    Prometheus-format metrics for the customer's monitoring. Authenticated by VERITAS_METRICS_TOKEN
+    (a bearer token chosen by the administrator), not by a user session. Off, and answering 401 to
+    everyone, unless that setting exists.
+    """
+    import metrics as _metrics
+    from fastapi.responses import PlainTextResponse
+    if not _metrics.token_ok(request.headers.get("authorization")):
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    return PlainTextResponse(_metrics.render(), media_type="text/plain; version=0.0.4")
+
+
 @app.get("/ready")
 async def ready():
     """

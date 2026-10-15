@@ -239,6 +239,26 @@ case "$1" in
     exit 0
     ;;
 
+  test-alert)
+    need_root test-alert
+    as_service --load-settings "$PLIST" --test-alert
+    ;;
+
+  support-bundle)
+    # One file to send to the vendor: version, license status, checks, settings, recent logs.
+    # No database, key, certificate, license file or password; tokens and personal identifiers are removed.
+    need_root support-bundle
+    OUT="${2:-./veritas-support-$(date +%Y%m%dT%H%M%S).zip}"
+    mkdir -p "$DATA_DIR/tmp" && chown "$SVC_USER":staff "$DATA_DIR/tmp"
+    TMP="$DATA_DIR/tmp/support-$$.zip"
+    if ! as_service --load-settings "$PLIST" --support-bundle "$TMP" --support-log "$APPLOG" --support-log "$LOG" --support-log "$ERRLOG" >/dev/null; then
+      rm -f "$TMP"; echo "Could not create the support bundle." >&2; exit 1
+    fi
+    mv "$TMP" "$OUT" && chmod 600 "$OUT" && chown "${SUDO_USER:-root}" "$OUT" 2>/dev/null
+    echo "Support bundle written to: $OUT"
+    echo "It contains no passwords, keys, databases or license file. Send it to your Veritas contact."
+    ;;
+
   reset-password)
     # Lost administrator password: set a temporary one (the user must choose their own at sign-in).
     need_root reset-password
@@ -313,6 +333,8 @@ case "$1" in
     echo "  backups       List the backups"
     echo "  verify-backup <f>   Check a backup file"
     echo "  restore <f> [--dry-run] [--restore-license]   Restore a backup (stops and starts the service)"
+    echo "  test-alert    Send a test message through the configured alert channels"
+    echo "  support-bundle [file]   Write one file for the vendor to diagnose a problem (no secrets or data)"
     echo "  reset-password <user>   Set a temporary password (lost administrator password)"
     echo "  install-cert <cert> <key>   Install a company TLS certificate and restart"
     echo "  trust-cert    Make this Mac's browsers trust Veritas's own certificate"

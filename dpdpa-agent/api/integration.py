@@ -72,6 +72,7 @@ from detection.engine import detect_event
 from detection.models import DetectedEvent, MatchedEntity
 from evidence_store.store import get_store
 from investigation import investigate, parse_reference
+import alerts
 from labels import check_label
 from llm_explainer.explainer import ExplainedVerdict, build_deferred_explanation
 from masking import mask_fields, mask_text
@@ -175,6 +176,11 @@ async def _process_event(event: Event, *, write_to_store: bool) -> Dict[str, Any
             "confidence": explained.confidence,
             "used_fallback": explained.used_fallback,
         })
+        try:   # a person is told about serious findings; a broken channel must never stop ingest
+            alerts.notify_finding(event.tenant_id, v.severity.value, v.rule_id.value, v.field, violation_id,
+                                  v.breach_notification_candidate, v.source_system)
+        except Exception:
+            logger.debug("alert hand-over failed", exc_info=True)
 
     return {"detected": detected, "explained": explained_and_stored}
 

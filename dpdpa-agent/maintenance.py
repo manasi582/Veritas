@@ -161,6 +161,11 @@ def run_once(now: Optional[datetime] = None) -> dict:
         status.update(last_chain_check_at=now.isoformat(), chain_check_error=str(e)[:300])
 
     _write_status(status)
+    try:
+        import alerts
+        alerts.check_and_alert()          # a failed backup or a broken chain reaches a person
+    except Exception:
+        logger.debug("alert check skipped", exc_info=True)
     return status
 
 
