@@ -172,7 +172,6 @@ def main() -> None:
         return
 
     if args.install_cert:
-        from pathlib import Path
         from tls import CertificateError, install_certificate
         try:
             info = install_certificate(Path(args.install_cert[0]), Path(args.install_cert[1]))
@@ -205,14 +204,12 @@ def main() -> None:
             for b in found:
                 print(f"  {b['filename']}  {b['created_at'] or 'unknown'}  {(b['size_bytes'] or 0) / 1_048_576:.1f} MB")
         elif args.verify_backup:
-            from pathlib import Path
             ok, errors = backup.verify_backup(Path(args.verify_backup))
             for e in errors:
                 print(f"  ERROR: {e}", file=sys.stderr)
             print(("VERIFIED OK: " if ok else "VERIFICATION FAILED: ") + args.verify_backup)
             raise SystemExit(0 if ok else 1)
         else:
-            from pathlib import Path
             result = backup.restore_backup(Path(args.restore), dry_run=args.dry_run,
                                            restore_license=args.restore_license, force=args.force)
             for f in result["restored_files"]:
