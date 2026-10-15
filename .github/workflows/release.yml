@@ -16,6 +16,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: bash .github/scripts/audit.sh dpdpa-agent/requirements.txt veritas-agent/requirements.txt
+      - name: The release trusts only the production license key
+        run: python3 .github/scripts/check_release_key.py
 
   # ── Linux .deb ─────────────────────────────────────────────────────────
   build-linux-deb:

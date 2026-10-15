@@ -37,6 +37,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Trust the CI test license key (never the production key)
+        run: python3 .github/scripts/use_ci_license_key.py
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -53,11 +56,11 @@ jobs:
 
       - name: Create an any-machine test license
         env:
-          VERITAS_PRIVATE_KEY_B64: ${{ secrets.VERITAS_PRIVATE_KEY_B64 }}
+          VERITAS_CI_PRIVATE_KEY_B64: ${{ secrets.VERITAS_CI_PRIVATE_KEY_B64 }}
         run: |
-          test -n "$VERITAS_PRIVATE_KEY_B64" || { echo "VERITAS_PRIVATE_KEY_B64 secret is not set"; exit 1; }
+          test -n "$VERITAS_CI_PRIVATE_KEY_B64" || { echo "VERITAS_CI_PRIVATE_KEY_B64 secret is not set"; exit 1; }
           mkdir -p /tmp/vdata
-          echo "$VERITAS_PRIVATE_KEY_B64" | base64 -d > /tmp/ci_private_key.pem
+          echo "$VERITAS_CI_PRIVATE_KEY_B64" | base64 -d > /tmp/ci_private_key.pem
           chmod 600 /tmp/ci_private_key.pem
           python tools/generate_license.py --org ci-agent-test --tier enterprise \
             --expiry 2027-12-31 --key /tmp/ci_private_key.pem --out /tmp/vdata/veritas.vlic

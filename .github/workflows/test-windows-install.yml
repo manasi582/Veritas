@@ -15,6 +15,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Trust the CI test license key (never the production key)
+        run: python .github/scripts/use_ci_license_key.py
+
       - name: Get latest release tag
         id: tag
         shell: bash
@@ -74,11 +77,11 @@ jobs:
       - name: Generate CI test license (any-machine)
         shell: pwsh
         env:
-          VERITAS_PRIVATE_KEY_B64: ${{ secrets.VERITAS_PRIVATE_KEY_B64 }}
+          VERITAS_CI_PRIVATE_KEY_B64: ${{ secrets.VERITAS_CI_PRIVATE_KEY_B64 }}
         run: |
           pip install cryptography --quiet
           # Decode private key from secret
-          $keyBytes = [Convert]::FromBase64String($env:VERITAS_PRIVATE_KEY_B64)
+          $keyBytes = [Convert]::FromBase64String($env:VERITAS_CI_PRIVATE_KEY_B64)
           [System.IO.File]::WriteAllBytes("C:\ci_private_key.pem", $keyBytes)
           python tools/generate_license.py `
             --org "ci-windows-test" `

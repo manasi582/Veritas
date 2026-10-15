@@ -4,6 +4,13 @@ What changed in each release, in plain language. The newest release is first. Ev
 
 ## Unreleased
 
+- **Security fix (dashboard):** names that an agent or API caller chooses (source system, field name) were shown in the live stream, ledger and case view without escaping, so a malicious agent token could run script in an administrator's browser. Every value from the server is now escaped, names containing `< > " ' & \``are refused where they enter, and the browser test checks both.
+- **Security fix (backups):** the backup-verify call took a path; it now takes only a file name.
+- **Dependencies:** python-jose (advisory without a fix) is replaced by PyJWT; cryptography is raised to 50 (three advisories). Existing sessions keep working.
+- **Supply chain:** each release carries a software bill of materials, `SHA256SUMS` and a signature that can be checked with `cosign`; a dependency audit blocks a release and runs weekly, with a Go vulnerability check and a secret scan.
+- **CI no longer uses the production license key:** tests sign licenses with a separate test key, and the release is checked to embed only the production key.
+- New `docs/SECURITY_REVIEW.md`: threat model and review package.
+
 - **Upgrades:** installing a new release now backs up your data first (with the release that is still installed) and, on Ubuntu, starts the service again afterwards. A failed backup is reported but does not stop the upgrade.
 - **Downgrades are refused:** installing an older release over a newer one stops with a clear message, because the newer release may have changed the data. To do it on purpose, `sudo touch /var/lib/veritas/ALLOW_DOWNGRADE` first (it allows one downgrade).
 - **Data format check:** each database carries a format number. A release that finds data written by a newer one refuses to start (once, with the reason) instead of running on it.
