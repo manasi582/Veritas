@@ -2,9 +2,13 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
+## 1.0.25
+
+- **macOS settings file fixed:** `/etc/veritas/config.env` is now readable by the service account (through an access-control entry, because that account has no group of its own) and by no other user. In 1.0.24 it was owned by `wheel`, so the service ignored it. The install test now checks that the service account can read it and another account cannot.
+
 ## 1.0.24
 
-- **macOS settings file:** settings now live in `/etc/veritas/config.env` (as on Linux), created once with a commented example and never replaced, so they survive upgrades. Private to root and the service account (found and fixed by the install test: the first version relied on a group the service account does not have). Settings in the service definition still win. A leftover `Path` import that broke the new one-shot commands in the packaged build is fixed.
+- **macOS settings file:** settings now live in `/etc/veritas/config.env` (as on Linux), created once with a commented example and never replaced, so they survive upgrades. **In this release the file's permissions were wrong on macOS: the service account could not read it, so settings in it were ignored. Use 1.0.25.** Settings in the service definition still win. A leftover `Path` import that broke the new one-shot commands in the packaged build is fixed.
 - **Dashboard:** the health card shows whether alerts and metrics are set up.
 
 - **Alerts:** Veritas can tell people by webhook (Slack, Teams, Mattermost, your own) and e-mail when HIGH findings arrive (batched, one message a minute per organization) and when a backup fails, the evidence chain breaks, the license or certificate is about to expire, or the disk is nearly full. `veritas test-alert` checks the setup. Messages never contain personal data.
