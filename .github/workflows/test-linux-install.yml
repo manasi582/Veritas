@@ -238,6 +238,7 @@ jobs:
           VERITAS_ORG: upgrade_org
           VERITAS_ADMIN_USER: upgrade_admin
           VERITAS_ADMIN_PASSWORD: Violet-Harbor#2468
+          UPGRADE_LICENSE_B64: ${{ secrets.VERITAS_CI_UPGRADE_LICENSE_B64 }}
         run: |
           up() { for i in $(seq 1 60); do curl -sk --max-time 3 "$VERITAS_URL/health" | grep -q '"status":"ok"' && return 0; sleep 5; done; return 1; }
           pip install requests >/dev/null
@@ -247,7 +248,10 @@ jobs:
           curl -fL --retry 3 -o /tmp/prev.deb "https://github.com/${{ github.repository }}/releases/download/$PREV/veritas_${PREV#v}_amd64.deb"
           sudo apt-get install -y /tmp/prev.deb
           rm -f /tmp/prev.deb
-          sudo veritas license /tmp/bound.vlic
+          # the previous release trusts only the production key, so it gets an any-machine license signed
+          # with it (a license file, not the key); the build from this commit trusts the CI test key
+          echo "$UPGRADE_LICENSE_B64" | base64 -d > /tmp/old-release.vlic
+          sudo veritas license /tmp/old-release.vlic
           up || { echo "old release did not start"; sudo journalctl -u veritas --no-pager | tail -40; exit 1; }
           export VERITAS_SETUP_CODE=$(sudo veritas setup-code | grep -E '^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$')
           test -n "$VERITAS_SETUP_CODE" || { echo "no setup code"; exit 1; }
@@ -257,6 +261,9 @@ jobs:
           bash package/build-deb.sh dpdpa-agent/dist/veritas-runtime 99.0.0-ci amd64 >/dev/null
           sudo apt-get install -y ./dist/veritas_99.0.0-ci_amd64.deb
           test "$(veritas version)" = "Veritas 99.0.0-ci" || { echo "upgrade did not take: $(veritas version)"; exit 1; }
+          # this build does not accept the previous release's license (different key, test only):
+          # give it the CI one, then everything else must still be there
+          sudo veritas license /tmp/bound.vlic
           up || { echo "new release did not start after the upgrade"; sudo journalctl -u veritas --no-pager | tail -40; exit 1; }
           python3 .github/scripts/upgrade_check.py verify
           AFTER=$(sudo veritas backups | grep -c veritas-backup || true)
@@ -296,4 +303,4 @@ jobs:
 
       - name: Remove signing key
         if: always()
-        run: rm -f /tmp/ci_private_key.pem
+        run: rm -f /tmp/ci_private_key.pem /tmp/old-release.vlic

@@ -316,6 +316,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           UPGRADE_STATE: /tmp/upgrade-state.json
           VERITAS_ORG: upgrade_org
+          UPGRADE_LICENSE_B64: ${{ secrets.VERITAS_CI_UPGRADE_LICENSE_B64 }}
         run: |
           up() { for i in $(seq 1 60); do curl -sk --max-time 3 "$VERITAS_URL/health" | grep -q '"status":"ok"' && return 0; sleep 5; done; return 1; }
           PREV=$(gh api "repos/${{ github.repository }}/releases" --jq '[.[] | select(.draft == false and .tag_name != "'"$GITHUB_REF_NAME"'") | .tag_name][0]')
@@ -325,7 +326,10 @@ jobs:
           sudo installer -pkg /tmp/prev.pkg -target /
           rm -f /tmp/prev.pkg
           test "$(veritas version)" = "Veritas ${PREV#v}" || { echo "old release did not install: $(veritas version)"; exit 1; }
-          sudo veritas license /tmp/this-machine.vlic
+          # the previous release trusts only the production key, so it gets an any-machine license signed
+          # with it (a license file, not the key); the build from this commit trusts the CI test key
+          echo "$UPGRADE_LICENSE_B64" | base64 -d > /tmp/old-release.vlic
+          sudo veritas license /tmp/old-release.vlic
           up || { echo "old release did not start"; sudo tail -40 /var/log/veritas/veritas-error.log; exit 1; }
           export VERITAS_SETUP_CODE=$(sudo veritas setup-code | grep -E '^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$')
           test -n "$VERITAS_SETUP_CODE" || { echo "no setup code"; exit 1; }
@@ -334,6 +338,9 @@ jobs:
           # install the release built from this commit over it
           OUT=$(sudo installer -pkg "dist/veritas_${PKG_VERSION}_arm64.pkg" -target / 2>&1) || { echo "$OUT"; exit 1; }
           test "$(veritas version)" = "Veritas $PKG_VERSION" || { echo "upgrade did not take: $(veritas version)"; exit 1; }
+          # this build does not accept the previous release's license (different key, test only):
+          # give it the CI one, then everything else must still be there
+          sudo veritas license /tmp/this-machine.vlic
           up || { echo "new release did not start after the upgrade"; sudo tail -40 /var/log/veritas/veritas-error.log; exit 1; }
           python .github/scripts/upgrade_check.py verify
           AFTER=$(sudo veritas backups | grep -c veritas-backup || true)
@@ -387,4 +394,4 @@ jobs:
 
       - name: Remove secrets
         if: always()
-        run: rm -f /tmp/ci_private_key.pem /tmp/*.vlic
+        run: rm -f /tmp/ci_private_key.pem /tmp/*.vlic /tmp/old-release.vlic
