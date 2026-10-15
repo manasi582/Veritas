@@ -2591,7 +2591,7 @@ async function refreshHealth() {
                     error:'🔴', expired:'🔴', no_cert:'🟡' };
     const labels = {
       evidence_store: 'Evidence Store', agent_store: 'Agent Store',
-      license: 'License', tls: 'TLS', disk: 'Disk', runtime: 'Runtime', maintenance: 'Backups & Chain',
+      license: 'License', tls: 'TLS', disk: 'Disk', runtime: 'Runtime', maintenance: 'Backups & Chain', alerts: 'Alerts',
     };
     container.innerHTML = Object.entries(data.checks).map(([key, val]) => {
       const st    = val.status || 'ok';
@@ -2603,6 +2603,10 @@ async function refreshHealth() {
       else if (key === 'agent_store' && val.agents !== undefined) sub = `${val.agents} agent(s)`;
       else if (key === 'runtime' && val.version) sub = `v${val.version}`;
       else if (key === 'tls' && val.days_remaining != null) sub = `certificate ${val.days_remaining}d left`;
+      else if (key === 'alerts') {
+        sub = (val.channels && val.channels.length ? val.channels.join(' + ') : 'no channel set')
+            + (val.metrics_enabled ? ' · metrics on' : '');
+      }
       else if (key === 'maintenance') {
         sub = val.problem ? val.problem
             : val.last_backup_at ? `last backup ${new Date(val.last_backup_at).toLocaleDateString()}`

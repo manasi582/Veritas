@@ -40,6 +40,10 @@ except ImportError:
 
 import uvicorn
 
+import settings_file
+
+settings_file.load_into_environment()    # /etc/veritas/config.env: survives upgrades; the service definition still wins
+
 from log_setup import configure_logging
 
 configure_logging()

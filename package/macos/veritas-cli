@@ -303,11 +303,11 @@ case "$1" in
     pkgutil --forget com.veritas.pkg >/dev/null 2>&1 || true
     rm -rf /opt/veritas
     if [ "$PURGE" = yes ]; then
-      rm -rf "$DATA_DIR" /var/log/veritas
+      rm -rf "$DATA_DIR" /var/log/veritas /etc/veritas
       dscl . -delete "/Users/$SVC_USER" 2>/dev/null || true
       echo "Veritas and all of its data were removed."
     else
-      echo "Veritas was removed. Its data is kept in $DATA_DIR (the license, databases, evidence)."
+      echo "Veritas was removed. Its data is kept in $DATA_DIR (the license, databases, evidence) and its settings in /etc/veritas/config.env."
       echo "To delete that too: sudo veritas uninstall --purge-data"
     fi
     rm -f /usr/local/bin/veritas

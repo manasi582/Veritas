@@ -51,6 +51,16 @@ chmod 755 "$DATA_DIR/tmp" 2>/dev/null || true
 chmod 750 "$LOG_DIR" 2>/dev/null || true
 chmod 600 "$LOG_DIR"/* 2>/dev/null || true   # logs from earlier versions were readable by everyone
 
+# ── 3b. Settings file (kept across upgrades: created only when it does not exist) ──
+mkdir -p /etc/veritas 2>/dev/null || true
+if [ ! -e /etc/veritas/config.env ] && [ -f /opt/veritas/config.env.example ]; then
+    cp /opt/veritas/config.env.example /etc/veritas/config.env
+fi
+# it can hold a mail password or a token: the service account may read it, other users may not
+chown root:"$USER_NAME" /etc/veritas /etc/veritas/config.env 2>/dev/null || true
+chmod 750 /etc/veritas 2>/dev/null || true
+chmod 640 /etc/veritas/config.env 2>/dev/null || true
+
 # ── 4. Install LaunchDaemon plist ───────────────────────────────────────────
 echo "[Veritas] Installing LaunchDaemon..."
 if [ -f "$PLIST_SRC" ]; then

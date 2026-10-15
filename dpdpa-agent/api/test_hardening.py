@@ -101,3 +101,23 @@ class TestErrorsRevealNothingInternal:
         r = admin_client.get("/api/does/not/exist")
         assert r.status_code == 404
         assert "Traceback" not in r.text
+
+
+class TestHealthCardAlerts:
+
+    def test_the_administrator_sees_whether_alerts_are_set_up(self, admin_client, monkeypatch):
+        monkeypatch.delenv("VERITAS_ALERT_WEBHOOK_URL", raising=False)
+        r = admin_client.get("/api/system/health").json()["checks"]["alerts"]
+        assert r["status"] == "disabled" and r["channels"] == [] and r["metrics_enabled"] is False
+        monkeypatch.setenv("VERITAS_ALERT_WEBHOOK_URL", "https://hooks.example/x")
+        monkeypatch.setenv("VERITAS_METRICS_TOKEN", "a-long-enough-token-1234")
+        r = admin_client.get("/api/system/health").json()["checks"]["alerts"]
+        assert r["status"] == "ok" and r["channels"] == ["webhook"] and r["metrics_enabled"] is True
+
+    def test_nobody_else_learns_how_alerts_are_wired(self, monkeypatch):
+        from passlib.context import CryptContext
+        pw = CryptContext(schemes=["bcrypt"], deprecated="auto").hash("ViewerPass1!")
+        get_user_store().create_user("h_viewer", "hv@test.io", pw, UserRole.VIEWER)
+        c = TestClient(app, raise_server_exceptions=False)
+        assert c.post("/api/auth/login", data={"username": "h_viewer", "password": "ViewerPass1!"}).status_code == 200
+        assert "alerts" not in c.get("/api/system/health").json()["checks"]

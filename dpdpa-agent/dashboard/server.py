@@ -794,6 +794,16 @@ async def system_health(_user: User = Depends(get_current_user)):
     except Exception as e:
         checks["maintenance"] = {"status": "error", "problem": str(e)}
 
+    # Alerts and metrics: whether anyone would be told (administrator only; see the filter below)
+    try:
+        import alerts
+        import metrics as _metrics
+        channels = [name for name, on in alerts.configured().items() if on]
+        checks["alerts"] = {"status": "ok" if channels else "disabled", "channels": channels,
+                            "metrics_enabled": len(_metrics.token()) >= 16}
+    except Exception as e:
+        checks["alerts"] = {"status": "error", "detail": str(e)}
+
     # Runtime info
     checks["runtime"] = {
         "status": "ok",

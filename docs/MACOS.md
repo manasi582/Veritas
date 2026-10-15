@@ -102,26 +102,20 @@ The service restarts itself only after a crash. A problem that restarting cannot
 | Program | `/opt/veritas/` (owned by root) |
 | Data: databases, license, secrets, certificates, backups | `/var/lib/veritas/` (private to the service account `_veritas`) |
 | Logs | `/var/log/veritas/veritas-app.log` (the server's own log) plus `veritas.log` and `veritas-error.log` (start-up and crash output). All private; read with `sudo veritas logs` |
+| Settings | `/etc/veritas/config.env` (kept across upgrades) |
 | Service definition | `/Library/LaunchDaemons/com.veritas.daemon.plist` |
 | Command | `/usr/local/bin/veritas` |
 
-### Settings (AI mode, port, backup schedule)
+### Settings (AI mode, port, backup schedule, alerts, metrics)
 
-Linux keeps settings in `/etc/veritas/config.env`. **On macOS they live in the service definition** and the upgrade replaces that file, so you must re-apply them after every upgrade:
+Settings live in `/etc/veritas/config.env`, the same file as on Linux, with a commented example of every setting. The package creates it once and **never replaces it**: upgrades keep it, and `sudo veritas uninstall` keeps it too (only `--purge-data` removes it). It is readable by root and the service account only, because it can hold a mail password or a token.
 
 ```bash
-sudo nano /Library/LaunchDaemons/com.veritas.daemon.plist   # add keys inside the EnvironmentVariables <dict>
+sudo nano /etc/veritas/config.env      # one NAME=value per line, # for comments
 sudo veritas restart
 ```
 
-For example, `VERITAS_BACKUP_KEEP` set to `14`:
-
-```xml
-<key>VERITAS_BACKUP_KEEP</key>
-<string>14</string>
-```
-
-The settings are listed in OPERATIONS.md. (A settings file that survives upgrades, as on Linux, is planned.)
+For example, to keep 14 backups: `VERITAS_BACKUP_KEEP=14`. The settings are listed in OPERATIONS.md. A setting in the service definition (`/Library/LaunchDaemons/com.veritas.daemon.plist`) still wins over the file, so earlier plist edits keep working; but the upgrade replaces the plist, so move them into `config.env`.
 
 ### Upgrading
 
@@ -250,6 +244,5 @@ How it behaves:
 ## Known limits on macOS
 
 - Apple silicon only; packages are not signed or notarized by Apple.
-- Server settings need re-applying after an upgrade (see above).
 - The server rotates its own log (10 MB at a time, 5 compressed copies kept). The agent's log (`/var/log/veritas-agent/agent.log`) is not rotated yet.
 - The Mac server is tested on a clean Apple-silicon machine for install, license, upgrade over the same version, backup and restore, and uninstall. Long-running behavior (weeks of uptime, a sleeping laptop) has not been measured yet.

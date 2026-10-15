@@ -148,6 +148,21 @@ jobs:
           if out=$(veritas setup-code 2>&1); then echo "setup-code worked without sudo"; exit 1; fi
           echo "$out" | grep -q "sudo" || { echo "no hint to use sudo: $out"; exit 1; }
 
+      - name: The settings file is private, is read by the service, and is kept
+        run: |
+          test -f /etc/veritas/config.env || { echo "no /etc/veritas/config.env"; exit 1; }
+          test "$(stat -f '%Su:%Sg %Lp' /etc/veritas/config.env)" = "root:_veritas 640" || { echo "wrong owner or mode: $(stat -f '%Su:%Sg %Lp' /etc/veritas/config.env)"; exit 1; }
+          if sudo -u nobody cat /etc/veritas/config.env >/dev/null 2>&1; then echo "any user can read the settings"; exit 1; fi
+          echo "VERITAS_ALERT_MIN_SEVERITY=MEDIUM" | sudo tee -a /etc/veritas/config.env >/dev/null
+          sudo veritas support-bundle /tmp/settings-check.zip
+          python3 - <<'PY'
+          import json, zipfile
+          s = json.loads(zipfile.ZipFile("/tmp/settings-check.zip").read("settings.json"))
+          assert s.get("VERITAS_ALERT_MIN_SEVERITY") == "MEDIUM", s
+          print("the setting in /etc/veritas/config.env reaches the program")
+          PY
+          sudo rm -f /tmp/settings-check.zip
+
       - name: Support bundle holds diagnostics and no secrets
         run: |
           sudo veritas support-bundle /tmp/support.zip
@@ -321,7 +336,7 @@ jobs:
       - name: Uninstall with --purge-data removes everything
         run: |
           sudo veritas uninstall --purge-data
-          for gone in /opt/veritas /var/lib/veritas /var/log/veritas; do
+          for gone in /opt/veritas /var/lib/veritas /var/log/veritas /etc/veritas; do
             if [ -e "$gone" ]; then echo "left behind after --purge-data: $gone"; exit 1; fi
           done
           if id _veritas >/dev/null 2>&1; then echo "service user left behind"; exit 1; fi
@@ -352,6 +367,8 @@ jobs:
           test -n "$VERITAS_SETUP_CODE" || { echo "no setup code"; exit 1; }
           python .github/scripts/upgrade_check.py seed
           BEFORE=$(sudo veritas backups | grep -c veritas-backup || true)
+          # a settings file written by the administrator must survive the upgrade untouched
+          sudo mkdir -p /etc/veritas && echo "VERITAS_BACKUP_KEEP=3" | sudo tee /etc/veritas/config.env >/dev/null
           # install the release built from this commit over it
           OUT=$(sudo installer -pkg "dist/veritas_${PKG_VERSION}_arm64.pkg" -target / 2>&1) || { echo "$OUT"; exit 1; }
           test "$(veritas version)" = "Veritas $PKG_VERSION" || { echo "upgrade did not take: $(veritas version)"; exit 1; }
@@ -360,6 +377,7 @@ jobs:
           sudo veritas license /tmp/this-machine.vlic
           up || { echo "new release did not start after the upgrade"; sudo tail -40 /var/log/veritas/veritas-error.log; exit 1; }
           python .github/scripts/upgrade_check.py verify
+          test "$(sudo cat /etc/veritas/config.env)" = "VERITAS_BACKUP_KEEP=3" || { echo "the upgrade changed the settings file"; sudo cat /etc/veritas/config.env; exit 1; }
           AFTER=$(sudo veritas backups | grep -c veritas-backup || true)
           [ "$AFTER" -gt "$BEFORE" ] || { echo "no backup was made before the upgrade ($BEFORE before, $AFTER after)"; exit 1; }
           sudo veritas verify-backup "$(sudo veritas backups | awk 'NR==1{print $1}')" | grep -q "VERIFIED OK"

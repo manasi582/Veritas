@@ -50,7 +50,7 @@ Moving to a new machine: install Veritas there, install a license issued for **t
 
 ## Telling people when something is wrong (alerts)
 
-Veritas can send a message when something needs a person, so nobody has to watch the dashboard. Set one or both channels in the service's settings (Linux: `/etc/veritas/config.env`, then `sudo veritas restart`; macOS: the `EnvironmentVariables` of the service definition, see MACOS.md):
+Veritas can send a message when something needs a person, so nobody has to watch the dashboard. Set one or both channels in the service's settings (`/etc/veritas/config.env` on Linux and macOS, then `sudo veritas restart`):
 
 | Setting | Meaning |
 |---|---|

@@ -17,6 +17,7 @@ mkdir -p dist
 cp "$BINARY" /tmp/veritas-pkg-root/opt/veritas/veritas-runtime
 chmod 755 /tmp/veritas-pkg-root/opt/veritas/veritas-runtime
 cp package/macos/com.veritas.daemon.plist /tmp/veritas-pkg-root/opt/veritas/
+cp package/macos/config.env /tmp/veritas-pkg-root/opt/veritas/config.env.example   # copied to /etc/veritas/config.env once, never replaced
 cp package/macos/scripts/postinstall /tmp/veritas-pkg-scripts/
 cp package/macos/scripts/preinstall /tmp/veritas-pkg-scripts/
 chmod 755 /tmp/veritas-pkg-scripts/*

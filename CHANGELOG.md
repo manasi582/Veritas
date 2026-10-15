@@ -4,6 +4,9 @@ What changed in each release, in plain language. The newest release is first. Ev
 
 ## Unreleased
 
+- **macOS settings file:** settings now live in `/etc/veritas/config.env` (as on Linux), created once with a commented example and never replaced, so they survive upgrades. Private to root and the service account. Settings in the service definition still win. A leftover `Path` import that broke the new one-shot commands in the packaged build is fixed.
+- **Dashboard:** the health card shows whether alerts and metrics are set up.
+
 - **Alerts:** Veritas can tell people by webhook (Slack, Teams, Mattermost, your own) and e-mail when HIGH findings arrive (batched, one message a minute per organization) and when a backup fails, the evidence chain breaks, the license or certificate is about to expire, or the disk is nearly full. `veritas test-alert` checks the setup. Messages never contain personal data.
 - **Metrics:** `GET /metrics` in the Prometheus format (license days, certificate days, disk, database sizes, backup age, broken chains, agents and findings per organization). Off until you set `VERITAS_METRICS_TOKEN`.
 - **Support bundle:** `sudo veritas support-bundle` writes one ZIP for the vendor: version, license status, checks, settings, recent logs with secrets and personal identifiers removed; never a database, key or license file.
