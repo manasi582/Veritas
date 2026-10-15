@@ -14,8 +14,8 @@ What it does
   2. registers --agents agents, each with its own token, like real ones;
   3. runs each agent in its own thread, sending events one after another for --duration seconds
      (or --events each), a mix of lines with personal data and lines without;
-  4. checks the books: events the server accepted == findings it stored for the organization (a
-     rejected or lost event is counted, not hidden), and the evidence chain still verifies;
+  4. checks the books: the findings the server reported in its answers == the findings it stored for the
+     organization (a rejected or lost event is counted, not hidden), and the evidence chain still verifies;
   5. prints a table and writes JSON (--out) so runs can be compared.
 
 An event is "accepted" on HTTP 200. HTTP 429 or 5xx, timeouts and refused connections are errors,
@@ -64,6 +64,7 @@ class Agent(threading.Thread):
         self.stop_at, self.max_events, self.pii_ratio = stop_at, events, pii_ratio
         self.latencies: List[float] = []
         self.accepted = 0
+        self.verdicts = 0
         self.errors: dict = {}
 
     def run(self):
@@ -87,6 +88,7 @@ class Agent(threading.Thread):
                 dt = time.perf_counter() - t0
                 if r.status_code == 200:
                     self.accepted += 1
+                    self.verdicts += len(r.json().get("verdicts", []))
                     self.latencies.append(dt)
                 else:
                     self.errors[f"http_{r.status_code}"] = self.errors.get(f"http_{r.status_code}", 0) + 1
@@ -155,6 +157,7 @@ def main() -> int:
 
     latencies = [x for a in agents for x in a.latencies]
     accepted = sum(a.accepted for a in agents)
+    expected_findings = sum(a.verdicts for a in agents)
     errors: dict = {}
     for a in agents:
         for k, v in a.errors.items():
@@ -189,6 +192,7 @@ def main() -> int:
                        "p99": round(1000 * percentile(latencies, 99), 1),
                        "max": round(1000 * max(latencies), 1) if latencies else 0,
                        "mean": round(1000 * statistics.mean(latencies), 1) if latencies else 0},
+        "pii_ratio": args.pii_ratio, "findings_expected": expected_findings,
         "findings_stored": stored, "evidence_chain_valid": chain, "server_healthy_after": health,
     }
     print(json.dumps(result, indent=2))
@@ -199,6 +203,8 @@ def main() -> int:
     problems = []
     if total and failed / total > args.max_error_rate:
         problems.append(f"{failed} of {total} events failed")
+    if stored is not None and stored != expected_findings:
+        problems.append(f"the server answered with {expected_findings} findings but stored {stored}")
     if chain is False:
         problems.append("the evidence chain no longer verifies")
     if health is False:

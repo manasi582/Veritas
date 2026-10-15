@@ -11,10 +11,13 @@ on:
     inputs:
       seconds:
         description: "Seconds each load level runs"
-        default: "30"
+        default: "20"
       levels:
         description: "Agent counts to try, space separated"
         default: "1 5 20 50"
+      ratios:
+        description: "Share of lines holding personal data to try, space separated (0 = none, 1 = all)"
+        default: "0 0.3 1"
 
 jobs:
   load:
@@ -90,11 +93,13 @@ jobs:
       - name: Run each load level
         run: |
           mkdir -p /tmp/load
-          for n in ${{ inputs.levels }}; do
-            echo "::group::$n agents"
-            python tools/loadtest.py --url "$VERITAS_URL" --agents "$n" --duration "${{ inputs.seconds }}" \
-              --max-error-rate 0.0 --out "/tmp/load/agents_$n.json" || echo "level $n reported problems"
-            echo "::endgroup::"
+          for ratio in ${{ inputs.ratios }}; do
+            for n in ${{ inputs.levels }}; do
+              echo "::group::$n agents, $ratio of lines with personal data"
+              python tools/loadtest.py --url "$VERITAS_URL" --agents "$n" --duration "${{ inputs.seconds }}" \
+                --pii-ratio "$ratio" --max-error-rate 0.0 --out "/tmp/load/r${ratio}_agents_$n.json" || echo "level $n / $ratio reported problems"
+              echo "::endgroup::"
+            done
           done
 
       - name: Write the result table
@@ -102,14 +107,14 @@ jobs:
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import glob, json
-          rows = [json.load(open(f)) for f in sorted(glob.glob("/tmp/load/agents_*.json"), key=lambda f: int(f.split("_")[-1].split(".")[0]))]
+          rows = sorted((json.load(open(f)) for f in glob.glob("/tmp/load/*.json")), key=lambda r: (r["pii_ratio"], r["agents"]))
           print("## Load test\n")
           print("GitHub runner, 2 vCPUs. Latency is the time for one event to be accepted.\n")
-          print("| Agents | Events/s | p50 ms | p95 ms | p99 ms | Failed | Findings stored | Chain valid |")
-          print("|---|---|---|---|---|---|---|---|")
+          print("| Lines with personal data | Agents | Events/s | p50 ms | p95 ms | p99 ms | Failed | Findings expected/stored | Chain valid |")
+          print("|---|---|---|---|---|---|---|---|---|")
           for r in rows:
               l = r["latency_ms"]
-              print(f'| {r["agents"]} | {r["throughput_events_per_second"]} | {l["p50"]} | {l["p95"]} | {l["p99"]} | {r["events_failed"]} | {r["findings_stored"]} | {r["evidence_chain_valid"]} |')
+              print(f'| {int(r["pii_ratio"] * 100)}% | {r["agents"]} | {r["throughput_events_per_second"]} | {l["p50"]} | {l["p95"]} | {l["p99"]} | {r["events_failed"]} | {r["findings_expected"]}/{r["findings_stored"]} | {r["evidence_chain_valid"]} |')
           try:
               res = json.load(open("/tmp/resources.json"))
               print(f'\nServer peak memory {res["peak_rss_mb"]} MB, peak CPU {res["peak_cpu_percent"]}% of one core.')
