@@ -56,10 +56,15 @@ mkdir -p /etc/veritas 2>/dev/null || true
 if [ ! -e /etc/veritas/config.env ] && [ -f /opt/veritas/config.env.example ]; then
     cp /opt/veritas/config.env.example /etc/veritas/config.env
 fi
-# it can hold a mail password or a token: the service account may read it, other users may not
-chown root:"$USER_NAME" /etc/veritas /etc/veritas/config.env 2>/dev/null || true
+# it can hold a mail password or a token: root and the service account may read it, other users may
+# not. The service account has no group of its own (it shares "staff" with every local user), so it is
+# let in by an access-control entry, not by the group.
+chown root:wheel /etc/veritas /etc/veritas/config.env 2>/dev/null || true
 chmod 750 /etc/veritas 2>/dev/null || true
-chmod 640 /etc/veritas/config.env 2>/dev/null || true
+chmod 600 /etc/veritas/config.env 2>/dev/null || true
+chmod -N /etc/veritas /etc/veritas/config.env 2>/dev/null || true       # start clean on an upgrade
+chmod +a "user:$USER_NAME allow list,search,readattr,readextattr,readsecurity" /etc/veritas 2>/dev/null || true
+chmod +a "user:$USER_NAME allow read,readattr,readextattr,readsecurity" /etc/veritas/config.env 2>/dev/null || true
 
 # ── 4. Install LaunchDaemon plist ───────────────────────────────────────────
 echo "[Veritas] Installing LaunchDaemon..."

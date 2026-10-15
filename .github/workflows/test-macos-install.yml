@@ -152,7 +152,9 @@ jobs:
         run: |
           # the folder is private, so look with sudo
           sudo test -f /etc/veritas/config.env || { echo "no /etc/veritas/config.env"; sudo ls -ld /etc/veritas; exit 1; }
-          test "$(sudo stat -f '%Su:%Sg %Lp' /etc/veritas/config.env)" = "root:_veritas 640" || { echo "wrong owner or mode: $(sudo stat -f '%Su:%Sg %Lp' /etc/veritas/config.env)"; exit 1; }
+          test "$(sudo stat -f '%Su:%Sg %Lp' /etc/veritas/config.env)" = "root:wheel 600" || { echo "wrong owner or mode: $(sudo stat -f '%Su:%Sg %Lp' /etc/veritas/config.env)"; exit 1; }
+          # the service account reads it (by an access-control entry), nobody else does
+          sudo -u _veritas cat /etc/veritas/config.env >/dev/null || { echo "the service account cannot read its settings"; sudo ls -le /etc/veritas; exit 1; }
           if sudo -u nobody cat /etc/veritas/config.env >/dev/null 2>&1; then echo "any user can read the settings"; exit 1; fi
           echo "VERITAS_ALERT_MIN_SEVERITY=MEDIUM" | sudo tee -a /etc/veritas/config.env >/dev/null
           sudo veritas support-bundle /tmp/settings-check.zip

@@ -108,7 +108,7 @@ The service restarts itself only after a crash. A problem that restarting cannot
 
 ### Settings (AI mode, port, backup schedule, alerts, metrics)
 
-Settings live in `/etc/veritas/config.env`, the same file as on Linux, with a commented example of every setting. The package creates it once and **never replaces it**: upgrades keep it, and `sudo veritas uninstall` keeps it too (only `--purge-data` removes it). It is readable by root and the service account only, because it can hold a mail password or a token.
+Settings live in `/etc/veritas/config.env`, the same file as on Linux, with a commented example of every setting. The package creates it once and **never replaces it**: upgrades keep it, and `sudo veritas uninstall` keeps it too (only `--purge-data` removes it). It is readable by root and the service account only (an access-control entry for the service account; `ls -le /etc/veritas` shows it), because it can hold a mail password or a token.
 
 ```bash
 sudo nano /etc/veritas/config.env      # one NAME=value per line, # for comments
