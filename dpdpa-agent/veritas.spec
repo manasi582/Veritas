@@ -40,7 +40,6 @@ spacy_core_datas = collect_data_files('spacy')
 
 # Presidio (uses regex patterns and other data files)
 presidio_datas  = collect_data_files('presidio_analyzer')
-presidio_datas += collect_data_files('presidio_anonymizer')
 
 import pathlib as _pl, presidio_analyzer as _pa
 _pa_pkg = _pl.Path(_pa.__file__).parent

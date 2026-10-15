@@ -1,0 +1,5 @@
+# Findings of the secret scan that were looked at and are not live secrets (commit:file:rule:line).
+# An old one-time agent registration key (30-minute lifetime) pasted in an early install guide:
+1d44205754797194df93b57a1c900d54526c7872:INSTALL.md:generic-api-key:345
+# Base64 of the words "your-key...": a placeholder in the Kubernetes guide:
+7ed21bd750281cf9c0f83a9b4f2eb992ce4c2e26:veritas-agent/k8s/README.md:generic-api-key:50
