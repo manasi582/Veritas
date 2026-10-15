@@ -2,7 +2,7 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
-## Unreleased
+## 1.0.24
 
 - **macOS settings file:** settings now live in `/etc/veritas/config.env` (as on Linux), created once with a commented example and never replaced, so they survive upgrades. Private to root and the service account. Settings in the service definition still win. A leftover `Path` import that broke the new one-shot commands in the packaged build is fixed.
 - **Dashboard:** the health card shows whether alerts and metrics are set up.
