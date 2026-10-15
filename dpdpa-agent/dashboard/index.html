@@ -2391,7 +2391,7 @@ async function populateOrgSelector() {
       currentOrgId = orgIds[0];
     }
     sel.innerHTML = orgIds.map(id =>
-      `<option value="${id}" ${id === currentOrgId ? 'selected' : ''}>${formatOrgDisplayName(id)}</option>`
+      `<option value="${escapeAttr(id)}" ${id === currentOrgId ? 'selected' : ''}>${escapeHtml(formatOrgDisplayName(id))}</option>`
     ).join('');
   } catch (e) {
     sel.innerHTML = '<option value="">Failed to load orgs</option>';
@@ -2510,7 +2510,7 @@ function renderFeed() {
 
 function buildViolationCard(v) {
   const el = document.createElement('div');
-  el.className = `violation-card ${v.severity || ''}`;
+  el.className = `violation-card ${safeId(v.severity)}`;
   const ts = v.timestamp ? new Date(v.timestamp).toLocaleTimeString() : '';
   const alertIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
   const breach = v.breach_notification_candidate ? `<span class="badge breach">${alertIcon} Breach</span>` : '';
@@ -2518,15 +2518,15 @@ function buildViolationCard(v) {
   const fallback = v.used_fallback ? `<span class="badge fallback">${zapIcon} Template</span>` : '';
   el.innerHTML = `
     <div class="violation-top">
-      <span class="badge ${v.severity}">${v.severity}</span>
-      <span class="badge rule">${v.rule_id}</span>
-      <span class="badge system">${v.source_system}</span>
-      <span class="violation-field">${v.field}</span>
+      <span class="badge ${safeId(v.severity)}">${escapeHtml(v.severity)}</span>
+      <span class="badge rule">${escapeHtml(v.rule_id)}</span>
+      <span class="badge system">${escapeHtml(v.source_system)}</span>
+      <span class="violation-field">${escapeHtml(v.field)}</span>
       ${breach}${fallback}
       <span class="violation-time">${ts}</span>
     </div>
-    <div class="violation-explanation">${v.explanation || '<em>No explanation generated</em>'}</div>
-    <div class="violation-section"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.7"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg> ${v.section_cited || 'No statute provided'}</div>
+    <div class="violation-explanation">${v.explanation ? escapeHtml(v.explanation) : '<em>No explanation generated</em>'}</div>
+    <div class="violation-section"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.7"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg> ${escapeHtml(v.section_cited || 'No statute provided')}</div>
   `;
   return el;
 }
@@ -2573,7 +2573,7 @@ function renderLeaderboard(containerId, counts) {
   const max = entries[0][1] || 1;
   el.innerHTML = entries.map(([name, count]) => `
     <div class="leaderboard-row">
-      <span class="leaderboard-name" title="${name}">${name}</span>
+      <span class="leaderboard-name" title="${escapeAttr(name)}">${escapeHtml(name)}</span>
       <div class="leaderboard-track"><div class="leaderboard-fill" style="width:${Math.round((count / max) * 100)}%"></div></div>
       <span class="leaderboard-count">${count}</span>
     </div>
@@ -2692,16 +2692,16 @@ function renderAuditTable(rows) {
     const breach = v.breach_notification_candidate ? `<span style="color:var(--breach);display:flex;justify-content:center;">${alertIconTable}</span>` : '-';
     const statusCls = v.remediation_status || 'OPEN';
     return `<tr>
-      <td class="mono" style="color:var(--text-headings)">#${v.violation_id}</td>
+      <td class="mono" style="color:var(--text-headings)">#${escapeHtml(v.violation_id)}</td>
       <td style="font-size:12px; font-variant-numeric: tabular-nums;">${ts}</td>
-      <td><span class="badge rule">${v.rule_id}</span></td>
-      <td><span class="badge ${v.severity}">${v.severity}</span></td>
-      <td class="mono" style="color:var(--text-headings)">${v.field}</td>
-      <td style="font-size:12px;">${v.source_system}</td>
-      <td><span class="status-badge ${statusCls}">${statusCls}</span></td>
+      <td><span class="badge rule">${escapeHtml(v.rule_id)}</span></td>
+      <td><span class="badge ${safeId(v.severity)}">${escapeHtml(v.severity)}</span></td>
+      <td class="mono" style="color:var(--text-headings)">${escapeHtml(v.field)}</td>
+      <td style="font-size:12px;">${escapeHtml(v.source_system)}</td>
+      <td><span class="status-badge ${safeId(statusCls)}">${escapeHtml(statusCls)}</span></td>
       <td style="text-align:center">${breach}</td>
       <td>
-        <button class="btn btn-secondary" style="padding: 4px 9px; font-size: 11px;" onclick="openDrawer('${v.verdict_id}')">Details</button>
+        <button class="btn btn-secondary" style="padding: 4px 9px; font-size: 11px;" onclick="openDrawer('${safeId(v.verdict_id)}')">Details</button>
       </td>
     </tr>`;
   }).join('');
@@ -2784,39 +2784,39 @@ async function openDrawer(verdictId) {
 
   document.getElementById('drawerContent').innerHTML = `
     <div class="violation-top" style="margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid var(--border);">
-      <span class="badge rule" style="font-size:12px">#${v.violation_id}</span>
-      <span class="badge ${v.severity}">${v.severity}</span>
-      <span class="badge rule">${v.rule_id}</span>
+      <span class="badge rule" style="font-size:12px">#${escapeHtml(v.violation_id)}</span>
+      <span class="badge ${safeId(v.severity)}">${escapeHtml(v.severity)}</span>
+      <span class="badge rule">${escapeHtml(v.rule_id)}</span>
       ${v.breach_notification_candidate ? `<span class="badge breach"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Breach Candidate</span>` : ''}
       ${v.used_fallback ? '<span class="badge fallback">Template Explanation</span>' : ''}
     </div>
-    <div class="drawer-field"><div class="lbl">Violating Field</div><div class="val mono" style="color:var(--text-headings)">${v.field}</div></div>
-    <div class="drawer-field"><div class="lbl">Source System</div><div class="val">${v.source_system}</div></div>
+    <div class="drawer-field"><div class="lbl">Violating Field</div><div class="val mono" style="color:var(--text-headings)">${escapeHtml(v.field)}</div></div>
+    <div class="drawer-field"><div class="lbl">Source System</div><div class="val">${escapeHtml(v.source_system)}</div></div>
     <div class="drawer-field"><div class="lbl">Timestamp</div><div class="val" style="font-variant-numeric:tabular-nums">${ts}</div></div>
-    <div class="drawer-field"><div class="lbl">Statute-Grounded Explanation</div><div class="val">${v.explanation}</div></div>
-    <div class="drawer-field"><div class="lbl">Statute Citation</div><div class="val mono" style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.7"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg> ${v.section_cited}</div></div>
+    <div class="drawer-field"><div class="lbl">Statute-Grounded Explanation</div><div class="val">${escapeHtml(v.explanation)}</div></div>
+    <div class="drawer-field"><div class="lbl">Statute Citation</div><div class="val mono" style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.7"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg> ${escapeHtml(v.section_cited)}</div></div>
 
     <div style="display:flex; gap:14px; margin-top:18px;">
-      <div class="drawer-field" style="flex:1;"><div class="lbl">Current Status</div><div class="val" style="background:transparent; padding:0; box-shadow:none;"><span class="status-badge ${v.remediation_status}">${v.remediation_status}</span></div></div>
+      <div class="drawer-field" style="flex:1;"><div class="lbl">Current Status</div><div class="val" style="background:transparent; padding:0; box-shadow:none;"><span class="status-badge ${safeId(v.remediation_status)}">${escapeHtml(v.remediation_status)}</span></div></div>
       ${v.remediation_updated_at ? `<div class="drawer-field" style="flex:1;"><div class="lbl">Updated</div><div class="val" style="background:transparent; padding:0; box-shadow:none; font-size:12px; color:var(--text-muted); font-variant-numeric:tabular-nums;">${new Date(v.remediation_updated_at).toLocaleString()}</div></div>` : ''}
     </div>
 
-    <div class="drawer-field" style="margin-top:8px;"><div class="lbl">Cryptographic Hash (#${v.violation_id})</div><div class="val mono" style="font-size:11px;color:var(--text-muted); background: var(--code-bg);">${v.row_hash}</div></div>
+    <div class="drawer-field" style="margin-top:8px;"><div class="lbl">Cryptographic Hash (#${v.violation_id})</div><div class="val mono" style="font-size:11px;color:var(--text-muted); background: var(--code-bg);">${escapeHtml(v.row_hash)}</div></div>
 
     <div class="drawer-actions">
-      ${canAck ? `<button class="btn btn-warn" onclick="updateStatus('${v.verdict_id}','ACKNOWLEDGED')">Acknowledge</button>` : ''}
-      ${canRes ? `<button class="btn btn-primary" onclick="updateStatus('${v.verdict_id}','RESOLVED')">Mark as Resolved</button>` : ''}
+      ${canAck ? `<button class="btn btn-warn" onclick="updateStatus('${safeId(v.verdict_id)}','ACKNOWLEDGED')">Acknowledge</button>` : ''}
+      ${canRes ? `<button class="btn btn-primary" onclick="updateStatus('${safeId(v.verdict_id)}','RESOLVED')">Mark as Resolved</button>` : ''}
       ${!canAck && !canRes ? `<button class="btn btn-secondary" disabled>Fully Resolved</button>` : ''}
     </div>
 
     <div class="investigate-panel">
-      <h4>Investigate Violation #${v.violation_id}</h4>
+      <h4>Investigate Violation #${escapeHtml(v.violation_id)}</h4>
       <div class="investigate-log" id="investigateLog"></div>
       <div class="investigate-suggestions">
-        ${INVESTIGATE_SUGGESTIONS.map(q => `<button onclick="askInvestigation(${JSON.stringify(q)})">${q}</button>`).join('')}
+        ${INVESTIGATE_SUGGESTIONS.map(q => `<button onclick="askInvestigation(${escapeAttr(JSON.stringify(q))})">${escapeHtml(q)}</button>`).join('')}
       </div>
       <div class="investigate-input-row">
-        <input type="text" id="investigateInput" placeholder="Ask anything about violation #${v.violation_id}…"
+        <input type="text" id="investigateInput" placeholder="Ask anything about violation #${escapeAttr(v.violation_id)}…"
                onkeydown="if(event.key==='Enter')askInvestigation()" />
         <button class="btn btn-primary" onclick="askInvestigation()">Ask</button>
       </div>
@@ -2861,7 +2861,7 @@ function renderInvestigateLog() {
   log.innerHTML = investigateHistory.map(turn => {
     const cls = turn.role === 'user' ? 'user' : `assistant${turn.fallback ? ' fallback' : ''}`;
     const label = turn.role === 'user' ? '' : (turn.fallback ? '⚡ template — ' : '');
-    return `<div class="investigate-turn ${cls}">${label}${turn.content}</div>`;
+    return `<div class="investigate-turn ${cls}">${label}${escapeHtml(turn.content)}</div>`;
   }).join('');
   log.scrollTop = log.scrollHeight;
 }
@@ -3128,8 +3128,8 @@ function showToast(msg, type='success') {
   const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
   const alertIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
   const icon = type === 'success' ? checkIcon : alertIcon;
-  el.innerHTML = `<span style="display:flex;align-items:center;">${icon}</span> ${msg}`;
-  el.className = `toast show ${type}`;
+  el.innerHTML = `<span style="display:flex;align-items:center;">${icon}</span> ${escapeHtml(msg)}`;
+  el.className = `toast show ${safeId(type)}`;
   setTimeout(() => { el.className = 'toast'; }, 3000);
 }
 
@@ -3184,9 +3184,15 @@ function loadSimExample() {
 }
 
 function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.innerText = s;
-  return d.innerHTML;
+  // for text AND attribute values: everything that can open a tag or close a quoted attribute
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// an id used inside an inline handler (onclick="f('...')"): only plain id characters survive
+function safeId(s) {
+  return String(s == null ? '' : s).replace(/[^A-Za-z0-9_.:-]/g, '');
 }
 
 async function runSimulatedScan() {
@@ -3251,17 +3257,17 @@ function renderSimResults(data) {
   }
 
   const verdictsHtml = data.verdicts.map(v => `
-    <div class="violation-card ${v.severity}" style="margin-top:10px;">
+    <div class="violation-card ${safeId(v.severity)}" style="margin-top:10px;">
       <div class="violation-top">
-        <span class="badge ${v.severity}">${v.severity}</span>
-        <span class="badge rule">${v.rule_id}</span>
-        <span class="badge system">${v.source_system}</span>
-        <span class="violation-field">${v.field}</span>
+        <span class="badge ${safeId(v.severity)}">${escapeHtml(v.severity)}</span>
+        <span class="badge rule">${escapeHtml(v.rule_id)}</span>
+        <span class="badge system">${escapeHtml(v.source_system)}</span>
+        <span class="violation-field">${escapeHtml(v.field)}</span>
         ${v.breach_notification_candidate ? '<span class="badge breach">Breach</span>' : ''}
-        ${v.violation_id != null ? `<span class="badge rule">#${v.violation_id}</span>` : ''}
+        ${v.violation_id != null ? `<span class="badge rule">#${escapeHtml(v.violation_id)}</span>` : ''}
       </div>
-      <div class="violation-explanation">${v.explanation || '<em>No explanation generated</em>'}</div>
-      <div class="violation-section" style="margin-top:6px;">${v.section_cited || 'No statute provided'}</div>
+      <div class="violation-explanation">${v.explanation ? escapeHtml(v.explanation) : '<em>No explanation generated</em>'}</div>
+      <div class="violation-section" style="margin-top:6px;">${escapeHtml(v.section_cited || 'No statute provided')}</div>
     </div>
   `).join('');
 
@@ -3443,7 +3449,7 @@ setInterval(() => {
 const AGENT_STALE_SECONDS = 90;
 
 function escapeAttr(s) {
-  return escapeHtml(String(s)).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  return escapeHtml(s);
 }
 
 function agentHealthSummary(a) {
@@ -3453,7 +3459,8 @@ function agentHealthSummary(a) {
     return { html: '<span style="color:var(--text-subtle)" title="This agent does not report health (older than v1.0.18)">—</span>', attention: false };
   }
   const c = h.counters || {};
-  const dropped = (c.dropped_buffer_full || 0) + (c.dropped_rejected || 0) + (c.dropped_auth || 0) + (c.dropped_other || 0);
+  const dropped = ['dropped_buffer_full', 'dropped_rejected', 'dropped_auth', 'dropped_other']
+    .reduce((sum, k) => sum + (Number(c[k]) || 0), 0);   // an agent's numbers are not trusted to be numbers
   const sources = h.sources || [];
   const errors = sources.filter(x => x.state === 'error');
   const parts = [];

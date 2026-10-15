@@ -83,7 +83,7 @@ a = Analysis(
         # loaded lazily by name, so PyInstaller cannot see them: without these the packaged
         # server cannot hash or verify passwords (no administrator, no sign-in) or sign sessions
         'passlib', 'passlib.handlers', 'passlib.handlers.bcrypt',
-        'jose', 'jose.jwt',
+        'jwt', 'jwt.algorithms',
     ],
     hookspath=[],
     runtime_hooks=['pyi_rth_spacy.py', 'pyi_rth_presidio.py'],

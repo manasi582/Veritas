@@ -1,0 +1,3 @@
+# Known vulnerabilities we have looked at and accepted, one per line: <advisory id> <why it is safe>
+# An entry here lets the dependency audit pass for that advisory, so every line needs a reason and
+# a look at it again when the dependency changes. Empty means nothing is accepted.

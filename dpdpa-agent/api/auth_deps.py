@@ -25,7 +25,8 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Cookie, HTTPException, Request
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 
 from user_store.models import User, UserRole
 from user_store.store import get_user_store
@@ -114,7 +115,7 @@ def decode_access_token(token: str) -> Optional[dict]:
     """Decode and validate a JWT. Returns payload dict or None on any failure."""
     try:
         return jwt.decode(token, _jwt_secret(), algorithms=[_ALGORITHM])
-    except JWTError:
+    except PyJWTError:
         return None
 
 

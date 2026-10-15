@@ -598,6 +598,10 @@ async def verify_backup_endpoint(
     """Verify a backup archive's integrity by checking SHA-256 checksums."""
     from backup import list_backups, verify_backup
     from runtime_paths import data_root
+    # a file name, not a path: otherwise "../secrets/db.key" would read (and reveal the existence of)
+    # any file the service can reach
+    if not filename or filename != Path(filename).name or filename in (".", ".."):
+        raise HTTPException(status_code=400, detail="Give the backup's file name, as listed by `veritas backups`.")
     backup_path = data_root() / "backups" / filename
     if not backup_path.exists():
         raise HTTPException(status_code=404, detail=f"Backup {filename!r} not found.")

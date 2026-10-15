@@ -1,0 +1,57 @@
+name: Security checks
+
+# Known-vulnerability audit of the dependencies and a scan for committed secrets. Runs when the
+# dependency lists change and every Monday, because new advisories appear without any change of ours.
+# A vulnerability we have judged harmless is listed, with the reason, in .github/security/audit-ignore.txt.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dpdpa-agent/requirements.txt'
+      - 'veritas-agent/requirements.txt'
+      - 'veritas-launcher/go.*'
+      - '.github/security/**'
+      - '.github/scripts/audit.sh'
+      - '.github/workflows/security.yml'
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+jobs:
+  python-dependencies:
+    name: Python dependencies have no known vulnerabilities
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: bash .github/scripts/audit.sh dpdpa-agent/requirements.txt veritas-agent/requirements.txt
+
+  go-dependencies:
+    name: Go launcher has no known vulnerabilities
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: govulncheck (Linux and Windows code paths)
+        working-directory: veritas-launcher
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          "$(go env GOPATH)/bin/govulncheck" ./...
+          GOOS=windows "$(go env GOPATH)/bin/govulncheck" ./...
+
+  secrets:
+    name: No secrets in the repository history
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 detect --source /repo --no-banner --redact --verbose

@@ -28,6 +28,7 @@ from config_loader import OrgConfigNotFoundError, load_org_config
 from rate_limit import issue_key_rate_limit, record_register_failure, register_rate_limit
 from user_store.models import User, UserRole
 from user_store.store import get_user_store
+from labels import check_label
 from veritas_version import MIN_AGENT_VERSION, get_version, is_agent_outdated
 
 logger = logging.getLogger("api.agents")
@@ -116,6 +117,11 @@ class IssueKeyResponse(BaseModel):
 class RegisterAgentRequest(BaseModel):
     registration_key: str = Field(..., min_length=1, max_length=500)
     source_label: str = Field(default="", max_length=200, description="Human label for this agent, e.g. 'order-service'")
+
+    @field_validator("source_label")
+    @classmethod
+    def _label_is_plain(cls, v):
+        return check_label(v, "source_label")
 
 
 class RegisterAgentResponse(BaseModel):

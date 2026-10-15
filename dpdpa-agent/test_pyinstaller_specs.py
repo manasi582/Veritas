@@ -16,8 +16,8 @@ SPECS = ["veritas-linux.spec", "veritas-mac.spec", "veritas.spec"]
 # Imported by name at run time; each one broke a packaged build or would.
 REQUIRED = {
     "passlib.handlers.bcrypt": "password hashing and verification (setup, sign-in)",
-    "jose": "signing and reading the session cookie",
-    "jose.jwt": "signing and reading the session cookie",
+    "jwt": "signing and reading the session cookie",
+    "jwt.algorithms": "signing and reading the session cookie",
     "anyio._backends._asyncio": "the web server's async backend",
     "uvicorn.lifespan.on": "web server start-up",
 }

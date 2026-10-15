@@ -139,7 +139,7 @@ def _check_imports():
         ("fastapi", "FastAPI"),
         ("uvicorn", "uvicorn"),
         ("passlib", "passlib"),
-        ("jose", "python-jose"),
+        ("jwt", "PyJWT"),
         ("cryptography", "cryptography"),
         ("sqlite3", "sqlite3 (stdlib)"),
         ("yaml", "PyYAML"),

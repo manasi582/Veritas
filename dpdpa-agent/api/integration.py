@@ -72,6 +72,7 @@ from detection.engine import detect_event
 from detection.models import DetectedEvent, MatchedEntity
 from evidence_store.store import get_store
 from investigation import investigate, parse_reference
+from labels import check_label
 from llm_explainer.explainer import ExplainedVerdict, build_deferred_explanation
 from masking import mask_fields, mask_text
 from org_config.store import (
@@ -230,6 +231,11 @@ class IngestEventRequest(BaseModel):
     raw_snippet: str = Field(..., min_length=1, max_length=100_000)
     fields: Dict[str, str] = Field(default_factory=dict)
 
+    @field_validator("source_system")
+    @classmethod
+    def _source_system_is_plain(cls, v):
+        return check_label(v, "source_system")
+
     @field_validator("source_type", mode="before")
     @classmethod
     def _source_type_case_insensitive(cls, v):
@@ -243,6 +249,7 @@ class IngestEventRequest(BaseModel):
         for k, v in self.fields.items():
             if len(k) > 200:
                 raise ValueError(f"Field key too long (max 200 chars): {repr(k)[:40]}")
+            check_label(k, "A field name")
             if len(v) > 10_000:
                 raise ValueError(f"Field value for {k!r} too long (max 10,000 chars).")
         return self
@@ -320,6 +327,10 @@ class ScanRequest(BaseModel):
     def _require_at_least_one_input(self) -> "ScanRequest":
         if not self.text and not self.fields:
             raise ValueError("At least one of 'text' or 'fields' must be provided.")
+        if self.source_system:
+            check_label(self.source_system, "source_system")
+        for k in (self.fields or {}):
+            check_label(k, "A field name")
         return self
 
 

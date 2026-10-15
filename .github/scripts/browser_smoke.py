@@ -184,6 +184,26 @@ def flow(browser, pages: list) -> None:
     expect(page.locator("#integrityResult")).to_contain_text("chain intact")
     shot(page, "06-chain-verified")
 
+    step("hostile names are refused by the API and cannot run script in the dashboard")
+    evil = '<img src=x onerror="window.__xss=1">'
+    refused = page.evaluate("""async (evil) => {
+        const r = await fetch('/v1/%s/scan', {method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text: 'hello', source_system: evil})});
+        return r.status;
+    }""" % ORG, evil)
+    assert refused == 422, f"markup in a source name was accepted by the scan API (status {refused})"
+    # even if such a name were already stored, the dashboard must show it as text
+    page.evaluate("""(evil) => {
+        const v = {severity: 'HIGH', rule_id: evil, source_system: evil, field: evil, explanation: evil,
+                   section_cited: evil, verdict_id: evil, violation_id: evil};
+        document.body.appendChild(buildViolationCard(v));
+        showToast(evil, 'success');
+    }""", evil)
+    page.wait_for_timeout(500)
+    assert page.evaluate("window.__xss") is None, "script from a hostile name ran in the dashboard"
+    assert page.locator("img[onerror]").count() == 0, "a hostile name became an element in the dashboard"
+    assert page.locator("text=onerror").count() >= 1, "the hostile name should be visible as plain text"
+
     # ── 7. Policy tab shows the data-since date ─────────────────────────
     step("Policy tab shows the 'data since' date")
     page.click("#nav-policy")

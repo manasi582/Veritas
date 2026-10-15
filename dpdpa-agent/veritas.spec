@@ -144,7 +144,7 @@ a = Analysis(
         'anyio', 'anyio._backends._asyncio',
         # Auth
         'passlib', 'passlib.handlers', 'passlib.handlers.bcrypt',
-        'jose', 'jose.jwt',
+        'jwt', 'jwt.algorithms',
     ],
     hookspath=[],
     hooksconfig={},

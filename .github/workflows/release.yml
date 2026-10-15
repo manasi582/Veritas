@@ -6,9 +6,21 @@ on:
       - 'v*'
 
 jobs:
+  # ── Gate: a known-vulnerable dependency blocks the release ─────────────
+  dependency-audit:
+    name: Dependencies have no known vulnerabilities
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: bash .github/scripts/audit.sh dpdpa-agent/requirements.txt veritas-agent/requirements.txt
+
   # ── Linux .deb ─────────────────────────────────────────────────────────
   build-linux-deb:
     name: Linux .deb (Ubuntu 22.04 amd64)
+    needs: dependency-audit
     runs-on: ubuntu-22.04   # pin to 22.04 so binary links against GLIBC 2.35 (max compat)
     permissions:
       contents: write
@@ -25,6 +37,13 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
           pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
+
+      - name: Software bill of materials (every package inside the server)
+        run: |
+          python -m venv /tmp/sbomtool && /tmp/sbomtool/bin/pip install -q cyclonedx-bom
+          /tmp/sbomtool/bin/cyclonedx-py environment --of JSON -o "dist-sbom-server.cdx.json" "$(which python)"
+          python -c "import json; d=json.load(open('dist-sbom-server.cdx.json')); print(len(d['components']), 'components')"
+          mkdir -p dist && mv dist-sbom-server.cdx.json "dist/veritas-server_${GITHUB_REF_NAME#v}.sbom.cdx.json"
 
       - name: Verify presidio conf is accessible
         working-directory: dpdpa-agent
@@ -62,14 +81,17 @@ jobs:
           path: dist/veritas_*.deb
           retention-days: 1
 
-      - name: Upload .deb to release
+      - name: Upload .deb and software bill of materials to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/veritas_*.deb
+          files: |
+            dist/veritas_*.deb
+            dist/veritas-server_*.sbom.cdx.json
 
   # ── macOS .pkg ────────────────────────────────────────────────────────
   build-macos-pkg:
     name: macOS .pkg (Apple Silicon arm64)
+    needs: dependency-audit
     runs-on: macos-latest
     permissions:
       contents: write
@@ -114,6 +136,7 @@ jobs:
   # ── macOS agent .pkg ──────────────────────────────────────────────────
   build-macos-agent-pkg:
     name: macOS agent .pkg (Apple Silicon arm64)
+    needs: dependency-audit
     runs-on: macos-latest
     permissions:
       contents: write
@@ -145,6 +168,7 @@ jobs:
   # ── Windows .exe installer ────────────────────────────────────────────
   build-windows-exe:
     name: Windows installer (amd64)
+    needs: dependency-audit
     runs-on: windows-latest
     permissions:
       contents: write
@@ -199,6 +223,7 @@ jobs:
   # ── Agent .deb (lightweight — no PyInstaller) ─────────────────────────
   build-agent-deb:
     name: Agent .deb (all architectures)
+    needs: dependency-audit
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -219,6 +244,7 @@ jobs:
   # ── Agent container image (GitHub Container Registry) ─────────────────
   build-agent-image:
     name: Agent container image (ghcr.io, amd64 + arm64)
+    needs: dependency-audit
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -276,11 +302,47 @@ jobs:
         with:
           files: veritas-agent-k8s_*.yaml
 
+  # ── Checksums and a signature, so a download can be checked ──────────
+  publish-integrity:
+    name: Checksums and signature
+    runs-on: ubuntu-22.04
+    needs: [build-linux-deb, build-macos-pkg, build-macos-agent-pkg, build-windows-exe, build-agent-deb, publish-k8s-manifests]
+    permissions:
+      contents: write
+      id-token: write       # lets the workflow sign with its own identity (no key to keep or leak)
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: sigstore/cosign-installer@v3
+      - name: Collect the release files and checksum them
+        run: |
+          mkdir assets && cd assets
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern '*.deb' --pattern '*.pkg' --pattern '*.exe' --pattern '*.yaml' --pattern '*.sbom.cdx.json'
+          ls -l
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+      - name: Sign the checksum file
+        working-directory: assets
+        run: cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+      - name: Check the signature the way a customer would
+        working-directory: assets
+        run: |
+          cosign verify-blob --bundle SHA256SUMS.sigstore.json \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            assets/SHA256SUMS
+            assets/SHA256SUMS.sigstore.json
+
   # ── Release notes ─────────────────────────────────────────────────────
   publish-release-notes:
     name: Publish release notes with install instructions
     runs-on: ubuntu-latest
-    needs: [build-linux-deb, build-macos-pkg, build-macos-agent-pkg, build-windows-exe, build-agent-deb, build-agent-image, publish-k8s-manifests]
+    needs: [build-linux-deb, build-macos-pkg, build-macos-agent-pkg, build-windows-exe, build-agent-deb, build-agent-image, publish-k8s-manifests, publish-integrity]
     permissions:
       contents: write
     steps:
@@ -366,6 +428,17 @@ jobs:
 
             Image: `ghcr.io/shreyaaassss/veritas-agent:${{ env.VER }}` · Manifests: `veritas-agent-k8s_${{ env.VER }}.yaml` (attached below).
             See `veritas-agent/k8s/README.md` for the steps: create a **reusable** key in the dashboard (Agents → Issue Registration Key → *Many agents*), store it as a Secret, set the server address and the naming rules in the ConfigMap, then apply.
+
+            ### Check your download
+
+            Every file is listed in `SHA256SUMS`, which is signed by this repository's release workflow (no key to trust or lose). `SHA256SUMS.sigstore.json` is the signature.
+            ```bash
+            sha256sum -c --ignore-missing SHA256SUMS        # Mac: shasum -a 256 -c --ignore-missing SHA256SUMS
+            cosign verify-blob --bundle SHA256SUMS.sigstore.json \
+              --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/${{ github.ref_name }}" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com SHA256SUMS
+            ```
+            `veritas-server_*.sbom.cdx.json` lists every software package inside the server (CycloneDX format).
 
             ### Requirements
 

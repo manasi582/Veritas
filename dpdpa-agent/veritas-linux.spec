@@ -76,7 +76,7 @@ a = Analysis(
         'httpx', 'httpx._transports', 'httpx._transports.default',
         'anyio', 'anyio._backends', 'anyio._backends._asyncio',
         'passlib', 'passlib.handlers', 'passlib.handlers.bcrypt',
-        'jose', 'jose.jwt',
+        'jwt', 'jwt.algorithms',
     ],
     hookspath=[],
     runtime_hooks=['pyi_rth_spacy.py', 'pyi_rth_presidio.py'],
