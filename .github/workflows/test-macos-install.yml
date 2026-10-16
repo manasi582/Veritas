@@ -412,6 +412,10 @@ jobs:
           if sudo test -e /var/lib/veritas/ALLOW_DOWNGRADE; then echo "the marker was not consumed"; exit 1; fi
           up || { echo "service did not start after the downgrade"; sudo tail -40 /var/log/veritas/veritas-error.log; exit 1; }
           python .github/scripts/upgrade_check.py verify
+          # the packaged program starts detection worker processes and they do the work
+          echo "VERITAS_DETECTION_WORKERS=2" | sudo tee -a /etc/veritas/config.env >/dev/null
+          sudo veritas restart
+          EXPECT_WORKERS=2 python .github/scripts/check_detection.py
 
       - name: Attach screenshots
         if: always()

@@ -68,7 +68,8 @@ from user_store.models import User, UserRole
 
 from config_loader import OrgConfigNotFoundError, load_org_config
 from dashboard.live_feed import publish as publish_live_feed
-from detection.engine import detect_event
+from detection.engine import identifier_validators
+from detection.pool import RETRY_AFTER_SECONDS, PoolBusy, get_pool
 from detection.models import DetectedEvent, MatchedEntity
 from evidence_store.store import get_store
 from investigation import investigate, parse_reference
@@ -145,7 +146,13 @@ async def _process_event(event: Event, *, write_to_store: bool) -> Dict[str, Any
     module. See llm_explainer/explainer.py's "AUTOMATIC EXPLANATION
     REMOVED" docstring note for the full rationale.
     """
-    detected: DetectedEvent = detect_event(event)
+    try:
+        detected: DetectedEvent = await get_pool().detect(event, identifier_validators(event.tenant_id))
+    except PoolBusy:
+        raise HTTPException(
+            status_code=503, headers={"Retry-After": str(RETRY_AFTER_SECONDS)},
+            detail="Veritas is busy detecting earlier events. Retry shortly; nothing was lost.",
+        )
     verdicts: List[Verdict] = evaluate_event(detected)
 
     store = get_store() if write_to_store else None

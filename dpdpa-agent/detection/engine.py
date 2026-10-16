@@ -54,7 +54,7 @@ rather than failing detection for the event. See _resolve_validation_status.
 from __future__ import annotations
 
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from config_loader import OrgConfigNotFoundError, load_org_config
 from detection.analyzer_engine import analyze_text
@@ -72,7 +72,20 @@ from validators import get_validator
 logger = logging.getLogger("detection.engine")
 
 
-def _resolve_validation_status(org_id: str, field_name: str, matched_text: str) -> str:
+def identifier_validators(org_id: str) -> Dict[str, str]:
+    """
+    {identifier name: validator name} from the organization's config (empty if it has none). The main
+    process reads this and hands it to a detection worker with the event, so a worker never reads, or
+    caches, an organization's settings (see detection/pool.py).
+    """
+    try:
+        return {i.name: i.validator for i in load_org_config(org_id).identifiers}
+    except OrgConfigNotFoundError:
+        return {}
+
+
+def _resolve_validation_status(org_id: str, field_name: str, matched_text: str,
+                               validators: Optional[Dict[str, str]] = None) -> str:
     """
     Phase 2: decide a match's validation_status.
 
@@ -90,28 +103,26 @@ def _resolve_validation_status(org_id: str, field_name: str, matched_text: str) 
     if field_name == FREE_TEXT_FIELD_LABEL:
         return PATTERN_MATCH
 
-    try:
-        config = load_org_config(org_id)
-    except OrgConfigNotFoundError:
+    if validators is None:                       # called in-process: read the config here
+        validators = identifier_validators(org_id)
+    validator_name = validators.get(field_name)
+    if validator_name is None or validator_name == "none":
         return PATTERN_MATCH
 
-    identifier = next((i for i in config.identifiers if i.name == field_name), None)
-    if identifier is None or identifier.validator == "none":
-        return PATTERN_MATCH
-
-    validator_fn = get_validator(identifier.validator)
+    validator_fn = get_validator(validator_name)
     if validator_fn is None:
         logger.warning(
             "Org %r declares validator %r for identifier %r, but no such "
             "validator is registered. Falling back to pattern_match confidence.",
-            org_id, identifier.validator, field_name,
+            org_id, validator_name, field_name,
         )
         return PATTERN_MATCH
 
     return VALIDATED if validator_fn(matched_text) else FAILED_VALIDATION
 
 
-def _scan_fields(org_id: str, fields: Dict[str, str]) -> List[MatchedEntity]:
+def _scan_fields(org_id: str, fields: Dict[str, str],
+                 validators: Optional[Dict[str, str]] = None) -> List[MatchedEntity]:
     """
     Runs the analyzer over each value in event.fields independently,
     tagging each match with its real field_name and (Phase 2) its
@@ -133,7 +144,7 @@ def _scan_fields(org_id: str, fields: Dict[str, str]) -> List[MatchedEntity]:
                     entity_type=r.entity_type,
                     confidence=r.score,
                     matched_text=matched_text,
-                    validation_status=_resolve_validation_status(org_id, field_name, matched_text),
+                    validation_status=_resolve_validation_status(org_id, field_name, matched_text, validators),
                 )
             )
         # Fallback for structured 'name' fields when spaCy NER omits single/isolated names
@@ -145,7 +156,7 @@ def _scan_fields(org_id: str, fields: Dict[str, str]) -> List[MatchedEntity]:
                         entity_type="PERSON",
                         confidence=0.85,
                         matched_text=value,
-                        validation_status=_resolve_validation_status(org_id, field_name, value),
+                        validation_status=_resolve_validation_status(org_id, field_name, value, validators),
                     )
                 )
     return matches
@@ -225,7 +236,7 @@ def _scan_raw_snippet(raw_snippet: str, already_matched_texts: set) -> List[Matc
     return matches
 
 
-def detect_event(event: Event) -> DetectedEvent:
+def detect_event(event: Event, validators: Optional[Dict[str, str]] = None) -> DetectedEvent:
     """
     Runs full PII detection over a single Event: scans every value in
     event.fields, then scans event.raw_snippet (deduplicated against
@@ -235,7 +246,7 @@ def detect_event(event: Event) -> DetectedEvent:
     contains_pii and matched_entities are always populated (never
     omitted) — see DetectedEvent's docstring.
     """
-    field_matches = _scan_fields(event.tenant_id, event.fields)
+    field_matches = _scan_fields(event.tenant_id, event.fields, validators)
     already_matched_texts = {_normalize_for_dedup(m.matched_text) for m in field_matches}
 
     raw_snippet_matches = _scan_raw_snippet(event.raw_snippet, already_matched_texts)

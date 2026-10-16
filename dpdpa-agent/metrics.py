@@ -133,6 +133,24 @@ def render() -> str:
         pass
 
     try:
+        from detection.pool import get_pool
+        st = get_pool().stats()
+        metric("veritas_detection_workers", "Detection worker processes (0 = one background thread).")
+        out.append(_line("veritas_detection_workers", st["workers"]))
+        metric("veritas_detection_in_flight", "Events being detected or waiting for a free worker.")
+        out.append(_line("veritas_detection_in_flight", st["in_flight"]))
+        metric("veritas_detection_queue_limit", "Events that may wait before new ones are refused.")
+        out.append(_line("veritas_detection_queue_limit", st["queue_limit"]))
+        metric("veritas_detection_events_total", "Events detected since start.", "counter")
+        out.append(_line("veritas_detection_events_total", st["completed"]))
+        metric("veritas_detection_refused_total", "Events refused as busy (agents retry them).", "counter")
+        out.append(_line("veritas_detection_refused_total", st["rejected"]))
+        metric("veritas_detection_worker_restarts_total", "Times a dead worker was replaced.", "counter")
+        out.append(_line("veritas_detection_worker_restarts_total", st["restarts"]))
+    except Exception:
+        pass
+
+    try:
         import alerts
         metric("veritas_alert_channel_configured", "1 for each alert channel that is set up.")
         for channel, on in alerts.configured().items():

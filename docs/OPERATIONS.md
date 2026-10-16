@@ -48,6 +48,19 @@ What `restore` does, so it is safe to use:
 
 Moving to a new machine: install Veritas there, install a license issued for **that** machine's fingerprint (`veritas fingerprint`), then `sudo veritas restore <file>`. The secrets that protect the databases travel inside the backup, so the restored data stays readable.
 
+## Capacity: how many events per second
+
+Finding personal data in a line is the costly step, and it runs in **detection workers**: separate processes, each holding its own copy of the language model (about 1 GB of memory each).
+
+| Setting | Meaning |
+|---|---|
+| `VERITAS_DETECTION_WORKERS` | `auto` (default), a number, or `0`. `auto` uses one worker per spare core, as many as the memory allows, at most 4, and none on a machine with fewer than 3 cores or about 5 GB of memory (detection then runs in one background thread, the original behaviour). |
+| `VERITAS_DETECTION_QUEUE` | How many events may wait for a free worker before new ones are refused with "busy, retry" (HTTP 503 with `Retry-After`). Default 50 per worker. |
+
+Measured on a 2-core shared test machine with one worker (before this feature): about 60 to 90 events per second, however many agents sent. Events arrive one line each, so one busy application can use all of that alone. With workers, the rate grows with the cores you give them; `tools/loadtest.py` (and the manual **Load test** workflow) measures your own machine. Measure before relying on a number: the figures depend on the machine and on how much of your logs contain text the model must examine.
+
+When the server is busier than it can handle, nothing is lost: an agent keeps its lines in memory (1,000 by default), is told to wait a second, and tries again. Only a source that stays above the server's rate for long enough to fill that buffer drops lines, and the agent reports how many (`dropped_buffer_full` in the dashboard's Agents tab). The dashboard's health card, `/metrics` (`veritas_detection_*`) and `GET /api/system/health` show the workers, the queue and the number refused.
+
 ## Telling people when something is wrong (alerts)
 
 Veritas can send a message when something needs a person, so nobody has to watch the dashboard. Set one or both channels in the service's settings (`/etc/veritas/config.env` on Linux and macOS, then `sudo veritas restart`):

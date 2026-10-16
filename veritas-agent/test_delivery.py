@@ -87,6 +87,12 @@ class TestOutagesAreRetriedWithoutLimit:
         assert result == "delivered", "an outage behind a proxy must not drop data"
         assert stats["retries"] == 20 and stats["dropped_rejected"] == 0
 
+    def test_503_busy_honours_retry_after(self):
+        # the server's detection queue is full: it asks for a short wait, not a growing backoff
+        s = Script(http_error(503, {"Retry-After": "1"}), http_error(503, {"Retry-After": "1"}))
+        result, _ = run(s)
+        assert result == "delivered" and s.sleeps == [1.0, 1.0]
+
     def test_429_honours_retry_after(self):
         s = Script(http_error(429, {"Retry-After": "7"}))
         result, _ = run(s)

@@ -2,6 +2,10 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
+## Unreleased
+
+- **Detection worker pool:** finding personal data now runs in several worker processes (`VERITAS_DETECTION_WORKERS`, default `auto`), so a server with more cores takes more events per second, and the dashboard stays responsive while events are processed. A bounded queue (`VERITAS_DETECTION_QUEUE`) answers "busy, retry" (HTTP 503 with `Retry-After`) instead of letting waits grow without limit; the agent honours `Retry-After` on 503 as it already did on 429, and loses nothing. Workers never read the organization settings: they are handed what they need with each event, so a policy change applies at once. Health card, `/metrics` and the install tests cover the pool.
+
 ## 1.0.25
 
 - **macOS settings file fixed:** `/etc/veritas/config.env` is now readable by the service account (through an access-control entry, because that account has no group of its own) and by no other user. In 1.0.24 it was owned by `wheel`, so the service ignored it. The install test now checks that the service account can read it and another account cannot.

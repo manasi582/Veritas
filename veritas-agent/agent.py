@@ -759,7 +759,7 @@ def deliver(
                 stats.incr("retries")
                 delay = backoff
                 retry_after = response.headers.get("Retry-After") if response is not None else None
-                if status == 429 and retry_after and str(retry_after).isdigit():
+                if status in (429, 503) and retry_after and str(retry_after).isdigit():   # a busy server says when
                     delay = min(float(retry_after), max_backoff)
                 log_limited(f"http{status}", logging.WARNING,
                             "HTTP %s from the server, retrying in %ds", status, int(delay))

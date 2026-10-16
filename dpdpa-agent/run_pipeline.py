@@ -46,7 +46,13 @@ settings_file.load_into_environment()    # /etc/veritas/config.env: survives upg
 
 from log_setup import configure_logging
 
-configure_logging()
+import multiprocessing as _mp
+
+if _mp.current_process().name == "MainProcess":
+    configure_logging()
+else:
+    # a detection worker (see detection/pool.py): the main process owns the rotating log file
+    logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("pipeline")
 
 # Exit status used when the license is missing/invalid (see veritas.service).
@@ -416,4 +422,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    _mp.freeze_support()        # lets the packaged program start its detection workers
     main()

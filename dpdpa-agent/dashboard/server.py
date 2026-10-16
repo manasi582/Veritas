@@ -794,6 +794,13 @@ async def system_health(_user: User = Depends(get_current_user)):
     except Exception as e:
         checks["maintenance"] = {"status": "error", "problem": str(e)}
 
+    # Detection: how events are being processed (administrator only; see the filter below)
+    try:
+        from detection.pool import get_pool
+        checks["detection"] = {"status": "ok", **get_pool().stats()}
+    except Exception as e:
+        checks["detection"] = {"status": "error", "detail": str(e)}
+
     # Alerts and metrics: whether anyone would be told (administrator only; see the filter below)
     try:
         import alerts
@@ -871,7 +878,17 @@ async def startup_event():
     asyncio.create_task(broadcaster_task())
     import maintenance
     maintenance.start()      # daily backup and evidence-chain check
+    from detection.pool import get_pool
+    pool = get_pool()
+    pool.start()             # worker processes load the language model while the server comes up
+    logger.info("Detection: %s (queue limit %d)", f"{pool.workers} worker processes" if pool.workers else "one background thread", pool.queue_limit)
     logger.info("Dashboard server started. Tenant-scoped WebSocket broadcaster running.")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    from detection.pool import reset_pool
+    reset_pool()
 
 
 # ---------------------------------------------------------------------------

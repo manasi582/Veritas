@@ -15,6 +15,9 @@ on:
       levels:
         description: "Agent counts to try, space separated"
         default: "1 5 20 50"
+      workers:
+        description: "VERITAS_DETECTION_WORKERS: detection worker processes (0 = one thread, the original behaviour)"
+        default: "2"
       ratios:
         description: "Share of lines holding personal data to try, space separated (0 = none, 1 = all)"
         default: "0 0.3 1"
@@ -25,6 +28,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     env:
+      VERITAS_DETECTION_WORKERS: ${{ inputs.workers }}
       VERITAS_URL: https://localhost:8000
       VERITAS_ADMIN_USER: ci_admin
       VERITAS_ADMIN_PASSWORD: CiAdmin#12345
@@ -109,7 +113,8 @@ jobs:
           import glob, json
           rows = sorted((json.load(open(f)) for f in glob.glob("/tmp/load/*.json")), key=lambda r: (r["pii_ratio"], r["agents"]))
           print("## Load test\n")
-          print("GitHub runner, 2 vCPUs. Latency is the time for one event to be accepted.\n")
+          import os
+          print(f"GitHub runner, 2 vCPUs, detection workers: {os.environ.get('VERITAS_DETECTION_WORKERS')}. Latency is the time for one event to be accepted.\n")
           print("| Lines with personal data | Agents | Events/s | p50 ms | p95 ms | p99 ms | Failed | Findings expected/stored | Chain valid |")
           print("|---|---|---|---|---|---|---|---|---|")
           for r in rows:
