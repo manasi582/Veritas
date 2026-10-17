@@ -121,7 +121,7 @@ jobs:
           sleep 3
           python tools/loadtest.py --url "$VERITAS_URL" --agents 50 --duration 20 --processes 2 --pii-ratio 0.3 --out /tmp/load/profiled.json || true
           wait
-          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
           import collections
           self_t = collections.Counter(); cum = collections.Counter(); total = 0
           for line in open("/tmp/profile.raw"):
@@ -142,6 +142,7 @@ jobs:
           show("Spent in the function itself", self_t)
           show("Spent in the function and what it calls", cum, 25)
           PY
+          cp /tmp/profile.raw /tmp/load/profile.raw.txt || true
 
       - name: Write the result table
         if: always()
