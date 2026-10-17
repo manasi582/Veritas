@@ -23,6 +23,17 @@ def fail(msg):
     sys.exit(1)
 
 
+# a restart returns at once on some platforms; the server needs about a minute to load the model
+for _ in range(80):
+    try:
+        if requests.get(f"{URL}/health", verify=False, timeout=3).status_code == 200:
+            break
+    except requests.RequestException:
+        pass
+    time.sleep(3)
+else:
+    fail("the server did not come back after the restart")
+
 s = requests.Session()
 s.verify = False
 r = s.post(f"{URL}/api/auth/login", data={"username": os.environ["VERITAS_ADMIN_USER"],
