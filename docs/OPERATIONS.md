@@ -57,7 +57,15 @@ Finding personal data in a line is the costly step, and it runs in **detection w
 | `VERITAS_DETECTION_WORKERS` | `auto` (default), a number, or `0`. `auto` uses one worker per spare core, as many as the memory allows, at most 4, and none on a machine with fewer than 3 cores or about 5 GB of memory (detection then runs in one background thread, the original behaviour). |
 | `VERITAS_DETECTION_QUEUE` | How many events may wait for a free worker before new ones are refused with "busy, retry" (HTTP 503 with `Retry-After`). Default 50 per worker. |
 
-Measured on a 2-core shared test machine with one worker (before this feature): about 60 to 90 events per second, however many agents sent. Events arrive one line each, so one busy application can use all of that alone. With workers, the rate grows with the cores you give them; `tools/loadtest.py` (and the manual **Load test** workflow) measures your own machine. Measure before relying on a number: the figures depend on the machine and on how much of your logs contain text the model must examine.
+**What to expect.** Measured on a shared 4-core, 15 GB test machine (GitHub's standard Linux runner; 30% of the lines held personal data; the load generator ran on the same machine, so a dedicated server does better):
+
+| Detection workers | Events per second | Wait for one event, 20 agents (median) |
+|---|---|---|
+| 0 (one background thread) | about 90 | about 200 ms |
+| 2 | about 185 | about 100 ms |
+| 3 | about 300 | about 60 ms |
+
+Nothing was lost in any run, every finding the server reported was stored, and the evidence chain verified. Events arrive one line each, so one busy application can use a whole worker alone. Throughput grew almost in step with the workers, up to the cores available. These are one machine's figures on one day (the same test varied by up to 40% between runs on shared hardware): measure your own with `tools/loadtest.py`, or the manual **Load test** workflow, before relying on a number.
 
 When the server is busier than it can handle, nothing is lost: an agent keeps its lines in memory (1,000 by default), is told to wait a second, and tries again. Only a source that stays above the server's rate for long enough to fill that buffer drops lines, and the agent reports how many (`dropped_buffer_full` in the dashboard's Agents tab). The dashboard's health card, `/metrics` (`veritas_detection_*`) and `GET /api/system/health` show the workers, the queue and the number refused.
 
