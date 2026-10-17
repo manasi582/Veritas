@@ -1,7 +1,7 @@
 name: Load test
 
 # How fast does one Veritas server take events from many agents, and does it lose any? Runs the
-# server from this commit on a GitHub runner (2 vCPUs: a small machine, so read the numbers as a
+# server from this commit on a GitHub runner (a small shared machine, so read the numbers as a
 # floor), sends events from 1, 5, 20 and 50 simulated agents, and writes a table to the run summary.
 # Start it by hand (Actions, Load test, Run workflow) before a release or after changing detection,
 # the evidence store or the event API.
@@ -46,6 +46,9 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: dpdpa-agent/requirements.txt
+
+      - name: The machine
+        run: echo "cpus=$(nproc) memory=$(free -g | awk '/Mem:/{print $2}') GB"
 
       - name: Install the server
         working-directory: dpdpa-agent
@@ -100,7 +103,7 @@ jobs:
           for ratio in ${{ inputs.ratios }}; do
             for n in ${{ inputs.levels }}; do
               echo "::group::$n agents, $ratio of lines with personal data"
-              python tools/loadtest.py --url "$VERITAS_URL" --agents "$n" --duration "${{ inputs.seconds }}" \
+              python tools/loadtest.py --url "$VERITAS_URL" --agents "$n" --duration "${{ inputs.seconds }}" --processes 2 \
                 --pii-ratio "$ratio" --max-error-rate 0.0 --out "/tmp/load/r${ratio}_agents_$n.json" || echo "level $n / $ratio reported problems"
               echo "::endgroup::"
             done
@@ -114,7 +117,7 @@ jobs:
           rows = sorted((json.load(open(f)) for f in glob.glob("/tmp/load/*.json")), key=lambda r: (r["pii_ratio"], r["agents"]))
           print("## Load test\n")
           import os
-          print(f"GitHub runner, 2 vCPUs, detection workers: {os.environ.get('VERITAS_DETECTION_WORKERS')}. Latency is the time for one event to be accepted.\n")
+          print(f"GitHub runner with {os.cpu_count()} CPUs (the load generator uses 2 processes on the same machine), detection workers: {os.environ.get('VERITAS_DETECTION_WORKERS')}. Latency is the time for one event to be accepted.\n")
           print("| Lines with personal data | Agents | Events/s | p50 ms | p95 ms | p99 ms | Failed | Findings expected/stored | Chain valid |")
           print("|---|---|---|---|---|---|---|---|---|")
           for r in rows:

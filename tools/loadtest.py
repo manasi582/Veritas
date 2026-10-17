@@ -98,6 +98,22 @@ class Agent(threading.Thread):
             n += 1
 
 
+def run_group(spec):
+    """One load-generating process: runs its share of the agents and returns their totals."""
+    base, org, first_idx, tokens, stop_at, events, pii_ratio = spec
+    group = [Agent(first_idx + i, base, org, t, stop_at, events, pii_ratio) for i, t in enumerate(tokens)]
+    for a in group:
+        a.start()
+    for a in group:
+        a.join()
+    errors: dict = {}
+    for a in group:
+        for k, v in a.errors.items():
+            errors[k] = errors.get(k, 0) + v
+    return ([x for a in group for x in a.latencies], sum(a.accepted for a in group),
+            sum(a.verdicts for a in group), errors)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--url", default=os.environ.get("VERITAS_URL", "https://localhost:8000"))
@@ -105,6 +121,9 @@ def main() -> int:
     ap.add_argument("--duration", type=float, default=30.0, help="seconds each agent sends (ignored with --events)")
     ap.add_argument("--events", type=int, default=None, help="events per agent instead of a duration")
     ap.add_argument("--pii-ratio", type=float, default=0.3, help="share of lines that hold personal data")
+    ap.add_argument("--processes", type=int, default=1,
+                    help="load-generating processes (one Python process cannot send more than a few hundred "
+                         "requests a second; raise this when measuring a fast server)")
     ap.add_argument("--out", default=None, help="write the result as JSON to this file")
     ap.add_argument("--max-error-rate", type=float, default=0.0, help="exit 1 if more than this share of events fail")
     args = ap.parse_args()
@@ -148,19 +167,23 @@ def main() -> int:
           f"{'%d events each' % args.events if args.events else '%.0f s' % args.duration}", flush=True)
     stop_at = time.time() + args.duration
     started = time.perf_counter()
-    agents = [Agent(i, base, org, tokens[i], stop_at, args.events, args.pii_ratio) for i in range(args.agents)]
-    for a in agents:
-        a.start()
-    for a in agents:
-        a.join()
+    procs = max(1, min(args.processes, args.agents))
+    shares = [tokens[i::procs] for i in range(procs)]
+    specs = [(base, org, i, shares[i], stop_at, args.events, args.pii_ratio) for i in range(procs)]
+    if procs == 1:
+        groups = [run_group(specs[0])]
+    else:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=procs) as ex:
+            groups = list(ex.map(run_group, specs))
     elapsed = time.perf_counter() - started
 
-    latencies = [x for a in agents for x in a.latencies]
-    accepted = sum(a.accepted for a in agents)
-    expected_findings = sum(a.verdicts for a in agents)
+    latencies = [x for g in groups for x in g[0]]
+    accepted = sum(g[1] for g in groups)
+    expected_findings = sum(g[2] for g in groups)
     errors: dict = {}
-    for a in agents:
-        for k, v in a.errors.items():
+    for g in groups:
+        for k, v in g[3].items():
             errors[k] = errors.get(k, 0) + v
     failed = sum(errors.values())
     total = accepted + failed
@@ -192,6 +215,7 @@ def main() -> int:
                        "p99": round(1000 * percentile(latencies, 99), 1),
                        "max": round(1000 * max(latencies), 1) if latencies else 0,
                        "mean": round(1000 * statistics.mean(latencies), 1) if latencies else 0},
+        "client_processes": procs, "client_cpus": os.cpu_count(),
         "pii_ratio": args.pii_ratio, "findings_expected": expected_findings,
         "findings_stored": stored, "evidence_chain_valid": chain, "server_healthy_after": health,
     }
