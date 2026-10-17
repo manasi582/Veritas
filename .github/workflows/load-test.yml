@@ -15,6 +15,9 @@ on:
       levels:
         description: "Agent counts to try, space separated"
         default: "1 5 20 50"
+      profile:
+        description: "Also profile the server's main process under 50 agents (true/false)"
+        default: "false"
       workers:
         description: "VERITAS_DETECTION_WORKERS: detection worker processes (0 = one thread, the original behaviour)"
         default: "2"
@@ -108,6 +111,35 @@ jobs:
               echo "::endgroup::"
             done
           done
+
+      - name: Profile the main process under load
+        if: ${{ inputs.profile == 'true' }}
+        run: |
+          pip install py-spy >/dev/null
+          PID=$(pgrep -f "run_pipeline.py --port" | head -1)
+          sudo "$(which py-spy)" record --pid "$PID" --duration 25 --format raw --output /tmp/profile.raw --nonblocking >/tmp/pyspy.log 2>&1 &
+          sleep 3
+          python tools/loadtest.py --url "$VERITAS_URL" --agents 50 --duration 20 --processes 2 --pii-ratio 0.3 --out /tmp/load/profiled.json || true
+          wait
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import collections
+          self_t = collections.Counter(); cum = collections.Counter(); total = 0
+          for line in open("/tmp/profile.raw"):
+              stack, _, n = line.rpartition(" ")
+              n = int(n); total += n
+              frames = stack.split(";")
+              self_t[frames[-1]] += n
+              for f in set(frames):
+                  cum[f] += n
+          def show(title, counter, k=18):
+              print(f"\n### {title}\n")
+              print("| Share | Where |\n|---|---|")
+              for f, n in counter.most_common(k):
+                  print(f"| {100 * n / total:.1f}% | `{f[:110]}` |")
+          print("## Where the server's main process spends its time (50 agents)")
+          show("Spent in the function itself", self_t)
+          show("Spent in the function and what it calls", cum, 25)
+          PY
 
       - name: Write the result table
         if: always()
