@@ -125,7 +125,9 @@ jobs:
           import collections
           self_t = collections.Counter(); cum = collections.Counter(); total = 0
           for line in open("/tmp/profile.raw"):
-              stack, _, n = line.rpartition(" ")
+              stack, _, n = line.rstrip("\n").rpartition(" ")
+              if not n.isdigit():
+                  continue                    # a message from py-spy, not a sample
               n = int(n); total += n
               frames = stack.split(";")
               self_t[frames[-1]] += n

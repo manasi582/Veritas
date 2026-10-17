@@ -15,6 +15,8 @@ on:
       - 'dpdpa-agent/backup.py'
       - 'dpdpa-agent/schema_guard.py'
       - '.github/scripts/upgrade_check.py'
+      - '.github/scripts/check_detection.py'
+      - 'dpdpa-agent/detection/**'
       - 'dpdpa-agent/veritas-linux.spec'
       - 'tools/fingerprint.py'
       - 'tools/generate_license.py'
