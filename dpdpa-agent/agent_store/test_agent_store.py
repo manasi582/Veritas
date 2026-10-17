@@ -305,3 +305,40 @@ class TestSingleton:
         s1 = get_agent_store()
         s2 = get_agent_store()
         assert s1 is s2
+
+
+class TestEventCounterIsBatched:
+    """The per-event counter must not cost a disk write per event, and must never be wrong when read."""
+
+    def test_reads_always_see_every_event(self, store):
+        agent, _ = store.create_agent("org_x", "label")
+        for _ in range(250):
+            store.increment_events(agent.agent_id)
+        assert store.get_agent(agent.agent_id).events_received == 250
+        assert [a.events_received for a in store.list_agents("org_x")] == [250]
+
+    def test_the_hot_path_does_not_write_on_every_event(self, store):
+        agent, _ = store.create_agent("org_x", "label")
+        store.flush_events()
+        before = store._conn.total_changes
+        for _ in range(500):
+            store.increment_events(agent.agent_id)
+        assert store._conn.total_changes == before, "the counter was written to disk per event"
+
+    def test_close_writes_what_is_pending(self, tmp_path):
+        from agent_store.store import AgentStore
+        path = tmp_path / "a.db"
+        s = AgentStore(path)
+        agent, _ = s.create_agent("org_x", "label")
+        for _ in range(7):
+            s.increment_events(agent.agent_id)
+        s.close()
+        again = AgentStore(path)
+        assert again.get_agent(agent.agent_id).events_received == 7
+        again.close()
+
+    def test_the_database_uses_write_ahead_logging(self, tmp_path):
+        from agent_store.store import AgentStore
+        s = AgentStore(tmp_path / "w.db")
+        assert s._conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        s.close()

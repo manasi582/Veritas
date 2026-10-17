@@ -31,14 +31,16 @@ def read_generation(db_path: Path) -> Optional[int]:
     """The generation stored in a database file; None if the file is missing or not readable."""
     if not db_path.is_file():
         return None
-    try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10)
+    for uri in (f"file:{db_path}?mode=ro", f"file:{db_path}"):     # a write-ahead-log database may need a normal open
         try:
-            return int(conn.execute("PRAGMA user_version").fetchone()[0])
-        finally:
-            conn.close()
-    except sqlite3.Error:
-        return None
+            conn = sqlite3.connect(uri, uri=True, timeout=10)
+            try:
+                return int(conn.execute("PRAGMA user_version").fetchone()[0])
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            continue
+    return None
 
 
 def check_and_stamp(data_dir: Path, generation: int = SCHEMA_GENERATION) -> Dict[str, int]:

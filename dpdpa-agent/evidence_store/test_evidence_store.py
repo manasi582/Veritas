@@ -247,3 +247,60 @@ class TestQuery:
         tmp_store.append(ev)
         with pytest.raises(sqlite3.IntegrityError):
             tmp_store.append(ev)
+
+
+def _stats_verdict(rule: str, severity: str, system: str, breach: bool, tenant: str = "org_stats") -> ExplainedVerdict:
+    ev = _make_explained_verdict(rule_id=RuleId(rule), source_system=system, severity=Severity(severity), tenant_id=tenant)
+    ev.verdict.breach_notification_candidate = breach
+    return ev
+
+
+class TestStatsAreCountedByTheDatabase:
+    """The overview must give the same numbers as reading every record, without reading any."""
+
+    def _fill(self, store):
+        for rule, sev, system, breach in [("EXPOSURE_001", "HIGH", "kyc", True), ("EXPOSURE_001", "HIGH", "kyc", False),
+                                          ("PURPOSE_001", "MEDIUM", "orders", False), ("RETENTION_001", "LOW", "orders", False)]:
+            store.append(_stats_verdict(rule, sev, system, breach))
+
+    def test_same_numbers_as_reading_every_record(self, tmp_store):
+        self._fill(tmp_store)
+        got = tmp_store.stats("org_stats")
+        rows = tmp_store.query("org_stats")
+        assert got["total"] == len(rows) == 4
+        assert got["by_rule"] == {"EXPOSURE_001": 2, "PURPOSE_001": 1, "RETENTION_001": 1}
+        assert got["by_severity"] == {"HIGH": 2, "MEDIUM": 1, "LOW": 1}
+        assert got["by_source_system"] == {"kyc": 2, "orders": 2}
+        assert got["by_status"] == {"OPEN": 4} and got["breach_candidates"] == 1
+        assert got["breach_candidates"] == sum(1 for r in rows if r.get("breach_notification_candidate"))
+
+    def test_counting_does_not_decrypt_records(self, tmp_store, monkeypatch):
+        self._fill(tmp_store)
+        import evidence_store.store as mod
+        def boom(*a, **k): raise AssertionError("a record was decrypted to count")
+        monkeypatch.setattr(mod, "decrypt_field", boom)
+        assert tmp_store.stats("org_stats")["total"] == 4
+
+    def test_other_organizations_are_not_counted(self, tmp_store):
+        self._fill(tmp_store)
+        assert tmp_store.stats("someone_else")["total"] == 0
+
+    def test_a_changed_summary_column_is_reported_as_tampering(self, tmp_store):
+        self._fill(tmp_store)
+        assert tmp_store.verify_chain("org_stats")["valid"] is True
+        tmp_store._conn.execute("UPDATE evidence SET severity = 'LOW' WHERE row_index = 1")
+        tmp_store._conn.commit()
+        assert tmp_store.verify_chain("org_stats") == {"valid": False, "first_broken_index": 0}
+
+    def test_an_existing_database_without_the_columns_is_filled_in_on_open(self, tmp_path):
+        path = tmp_path / "old.db"
+        s = EvidenceStore(path)
+        s.append(_stats_verdict("EXPOSURE_001", "HIGH", "kyc", True))
+        s.close()
+        raw = sqlite3.connect(path)                       # make it look like it predates the columns
+        raw.execute("UPDATE evidence SET rule_id = NULL, severity = NULL, source_system = NULL, breach_candidate = NULL")
+        raw.commit(); raw.close()
+        again = EvidenceStore(path)
+        assert again.stats("org_stats")["by_severity"] == {"HIGH": 1}
+        assert again.verify_chain("org_stats")["valid"] is True
+        again.close()

@@ -574,3 +574,31 @@ def _login(client, who):
     r = client.post("/api/auth/login", data={"username": who, "password": "Adm1n-Strong#Pass"})
     assert r.status_code == 200, r.text
     return client
+
+
+class TestBackupsAreSingleFiles:
+    def test_a_backup_of_a_write_ahead_log_database_holds_one_file_and_restores_without_leftovers(self, data, monkeypatch, tmp_path_factory):
+        import zipfile
+        # the live evidence database uses write-ahead logging
+        assert sqlite3.connect(data / "evidence.db").execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        path = backup.create_backup()
+        names = zipfile.ZipFile(path).namelist()
+        assert "evidence.db" in names and not any(n.endswith(("-wal", "-shm")) for n in names)
+        target = tmp_path_factory.mktemp("restore2")
+        assert backup.restore_backup(path, target_root=target)["success"]
+        assert not any((target / n).exists() for n in ("evidence.db-wal", "evidence.db-shm"))
+        assert sqlite3.connect(target / "evidence.db").execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+
+    def test_a_log_file_left_by_a_crash_is_kept_in_the_safety_copy(self, data, monkeypatch):
+        """After a crash the newest records may only be in the -wal file; a restore must not lose them."""
+        self._live = TestRestore._live.__get__(self)
+        self._stop_service = TestRestore._stop_service.__get__(self)
+        self._live(data, monkeypatch)
+        path = backup.create_backup()
+        self._stop_service()
+        (data / "evidence.db-wal").write_bytes(b"committed but not yet in the main file")
+        res = backup.restore_backup(path)
+        assert res["success"], res
+        kept = Path(res["safety_copy"]) / "evidence.db-wal"
+        assert kept.read_bytes() == b"committed but not yet in the main file"
+        assert not (data / "evidence.db-wal").exists()          # and the restored database starts clean

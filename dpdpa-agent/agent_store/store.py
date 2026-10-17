@@ -28,6 +28,7 @@ import logging
 import secrets
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -76,15 +77,25 @@ def _dt(value: Optional[str]) -> Optional[datetime]:
 class AgentStore:
     """
     SQLite-backed store for registration keys and Agent records.
-    All writes are guarded by a threading.Lock; reads are not (SQLite WAL
-    is not enabled here, but read-only contention is acceptable for demo).
+    All writes are guarded by a threading.Lock. The database uses write-ahead logging (a commit
+    costs one disk sync, not three, and readers do not wait for the writer).
+
+    The per-agent events_received counter is kept in memory and written in batches (at most every
+    EVENT_FLUSH_SECONDS, and always before anything reads it or the store closes): writing it on
+    every event cost a disk sync per event and was the second biggest cost of taking an event. A
+    crash can lose the last few seconds of this informational counter, never an event.
     """
+
+    EVENT_FLUSH_SECONDS = 2.0
 
     def __init__(self, db_path: str | Path = _DEFAULT_DB_PATH) -> None:
         self.db_path = Path(db_path)
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._pending_events: dict = {}
+        self._last_flush = time.monotonic()
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -330,6 +341,7 @@ class AgentStore:
 
     def get_agent(self, agent_id: str) -> Optional[Agent]:
         """Look up an Agent by its ID."""
+        self.flush_events()
         row = self._conn.execute(
             "SELECT * FROM agents WHERE agent_id = ?",
             (agent_id,),
@@ -338,6 +350,7 @@ class AgentStore:
 
     def list_agents(self, org_id: Optional[str] = None) -> List[Agent]:
         """List all agents, optionally filtered by org_id."""
+        self.flush_events()
         if org_id is not None:
             rows = self._conn.execute(
                 "SELECT * FROM agents WHERE org_id = ? ORDER BY created_at",
@@ -392,16 +405,33 @@ class AgentStore:
             self._conn.commit()
 
     def increment_events(self, agent_id: str) -> None:
-        """Increment events_received counter for an agent."""
+        """Count one accepted event for an agent (written to disk in batches, see the class note)."""
         with self._lock:
-            self._conn.execute(
-                "UPDATE agents SET events_received = events_received + 1 WHERE agent_id = ?",
-                (agent_id,),
-            )
-            self._conn.commit()
+            self._pending_events[agent_id] = self._pending_events.get(agent_id, 0) + 1
+            if time.monotonic() - self._last_flush >= self.EVENT_FLUSH_SECONDS:
+                self._flush_events_locked()
+
+    def flush_events(self) -> None:
+        """Write the batched counters now."""
+        with self._lock:
+            self._flush_events_locked()
+
+    def _flush_events_locked(self) -> None:
+        self._last_flush = time.monotonic()
+        if not self._pending_events:
+            return
+        pending, self._pending_events = self._pending_events, {}
+        self._conn.executemany(
+            "UPDATE agents SET events_received = events_received + ? WHERE agent_id = ?",
+            [(n, agent_id) for agent_id, n in pending.items()],
+        )
+        self._conn.commit()
 
     def close(self) -> None:
-        self._conn.close()
+        try:
+            self.flush_events()
+        finally:
+            self._conn.close()
 
 
 # ---------------------------------------------------------------------------

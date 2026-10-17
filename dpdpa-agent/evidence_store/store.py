@@ -197,6 +197,9 @@ class EvidenceStore:
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # write-ahead logging: a commit costs one disk sync instead of three, and readers (the dashboard)
+        # do not wait for the writer. A commit is still durable once it returns.
+        self._conn.execute("PRAGMA journal_mode=WAL")
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -215,6 +218,7 @@ class EvidenceStore:
             """)
             self._migrate_add_tenant_id_column()
             self._migrate_add_violation_id_column()
+            self._migrate_add_summary_columns()
             self._migrate_add_case_tables()
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_verdict_id ON evidence(verdict_id)"
@@ -287,6 +291,36 @@ class EvidenceStore:
         if tenant_ids:
             logger.info("Backfilled violation_id for %d tenant(s).", len(tenant_ids))
 
+    _SUMMARY_COLUMNS = (("rule_id", "TEXT"), ("severity", "TEXT"), ("source_system", "TEXT"),
+                        ("breach_candidate", "INTEGER"))
+
+    def _migrate_add_summary_columns(self) -> None:
+        """
+        Adds rule_id, severity, source_system and breach_candidate as plain columns, copied from the
+        record when it is written, so the dashboard's overview can be counted by the database instead
+        of by decrypting every record. They are NOT part of the hash; verify_chain() checks each one
+        against the signed record, so a changed column is reported like any other tampering.
+        Existing rows are filled once, here. Idempotent.
+        """
+        existing = {row["name"] for row in self._conn.execute("PRAGMA table_info(evidence)")}
+        for name, kind in self._SUMMARY_COLUMNS:
+            if name not in existing:
+                self._conn.execute(f"ALTER TABLE evidence ADD COLUMN {name} {kind}")
+        todo = self._conn.execute("SELECT row_index, payload_json FROM evidence WHERE rule_id IS NULL").fetchall()
+        if not todo:
+            return
+        logger.info("Migrating evidence store: filling summary columns for %d existing row(s).", len(todo))
+        for n, row in enumerate(todo, start=1):
+            p = json.loads(decrypt_field(row["payload_json"]))
+            self._conn.execute(
+                "UPDATE evidence SET rule_id = ?, severity = ?, source_system = ?, breach_candidate = ? "
+                "WHERE row_index = ?",
+                (p.get("rule_id"), p.get("severity"), p.get("source_system"),
+                 1 if p.get("breach_notification_candidate") else 0, row["row_index"]))
+            if n % 2000 == 0:
+                self._conn.commit()
+        self._conn.commit()
+
     def _migrate_add_case_tables(self) -> None:
         """Phase 13 migration: add case_metadata and case_comments tables."""
         self._conn.executescript("""
@@ -356,8 +390,9 @@ class EvidenceStore:
             self._conn.execute("""
                 INSERT INTO evidence
                     (verdict_id, payload_json, row_hash, previous_hash,
-                     remediation_status, remediation_updated_at, appended_at, tenant_id, violation_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     remediation_status, remediation_updated_at, appended_at, tenant_id, violation_id,
+                     rule_id, severity, source_system, breach_candidate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 str(ev.verdict.verdict_id),
                 encrypt_field(payload_json),   # store encrypted; hash was computed on plaintext
@@ -368,6 +403,10 @@ class EvidenceStore:
                 appended_at,
                 tenant_id,
                 violation_id,
+                ev.verdict.rule_id.value,
+                ev.verdict.severity.value,
+                ev.verdict.source_system,
+                1 if ev.verdict.breach_notification_candidate else 0,
             ))
             self._conn.commit()
 
@@ -395,7 +434,8 @@ class EvidenceStore:
         This is what the auditor runs as monthly sign-off, for their own org.
         """
         cursor = self._conn.execute(
-            "SELECT row_index, payload_json, row_hash, previous_hash "
+            "SELECT row_index, payload_json, row_hash, previous_hash, "
+            "rule_id, severity, source_system, breach_candidate "
             "FROM evidence WHERE tenant_id = ? ORDER BY row_index ASC",
             (tenant_id,),
         )
@@ -415,6 +455,16 @@ class EvidenceStore:
             if row["previous_hash"] != expected_previous:
                 logger.warning(
                     "previous_hash mismatch for tenant_id=%r at tenant-local index %d",
+                    tenant_id, i,
+                )
+                return {"valid": False, "first_broken_index": i}
+            # the plain summary columns (used for the overview counts) must say what the signed record says
+            signed = json.loads(plaintext_json)
+            if (row["rule_id"], row["severity"], row["source_system"], row["breach_candidate"]) != (
+                    signed.get("rule_id"), signed.get("severity"), signed.get("source_system"),
+                    1 if signed.get("breach_notification_candidate") else 0):
+                logger.warning(
+                    "summary columns differ from the signed record for tenant_id=%r at tenant-local index %d",
                     tenant_id, i,
                 )
                 return {"valid": False, "first_broken_index": i}
@@ -585,6 +635,25 @@ class EvidenceStore:
         """Return total number of rows in the store for tenant_id."""
         cursor = self._conn.execute("SELECT COUNT(*) as n FROM evidence WHERE tenant_id = ?", (tenant_id,))
         return cursor.fetchone()["n"]
+
+    def stats(self, tenant_id: str) -> dict:
+        """
+        The dashboard overview for one organization, counted by the database (no record is decrypted):
+        {"total", "by_rule", "by_severity", "by_source_system", "by_status", "breach_candidates"}.
+        """
+        def grouped(column: str) -> dict:
+            rows = self._conn.execute(
+                f"SELECT {column} AS k, COUNT(*) AS n FROM evidence WHERE tenant_id = ? GROUP BY {column}",
+                (tenant_id,)).fetchall()
+            return {(r["k"] if r["k"] is not None else "unknown"): r["n"] for r in rows}
+
+        by_status = grouped("remediation_status")
+        breaches = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM evidence WHERE tenant_id = ? AND breach_candidate = 1", (tenant_id,)
+        ).fetchone()["n"]
+        return {"total": sum(by_status.values()), "by_rule": grouped("rule_id"),
+                "by_severity": grouped("severity"), "by_source_system": grouped("source_system"),
+                "by_status": by_status, "breach_candidates": breaches}
 
     def count_by_status(self, tenant_id: str) -> dict:
         """{remediation_status: number of findings} for tenant_id (cheap: no payload is read)."""

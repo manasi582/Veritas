@@ -68,3 +68,16 @@ def test_stores_still_open_a_stamped_database(tmp_path, monkeypatch):
     store.close() if hasattr(store, "close") else None
     sg.check_and_stamp(tmp_path)
     UserStore(str(tmp_path / "users.db"))
+
+
+def test_a_write_ahead_log_database_is_read_too(tmp_path):
+    """The stores now use write-ahead logging; the guard must still read their format number."""
+    path = tmp_path / "users.db"
+    c = sqlite3.connect(path)
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("CREATE TABLE t (x)")
+    c.execute("PRAGMA user_version = 9")
+    c.commit(); c.close()
+    assert sg.read_generation(path) == 9
+    with pytest.raises(sg.SchemaTooNew):
+        sg.check_and_stamp(tmp_path, generation=2)

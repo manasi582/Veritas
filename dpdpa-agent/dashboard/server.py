@@ -435,29 +435,7 @@ async def export_evidence(
 
 @app.get("/api/{org_id}/stats")
 async def get_stats(org_id: str, _user: User = Depends(check_org_access)):
-    store = get_store()
-    rows = store.query(org_id)
-    stats: dict[str, Any] = {
-        "total": len(rows),
-        "by_rule": {},
-        "by_severity": {},
-        "by_source_system": {},
-        "by_status": {},
-        "breach_candidates": 0,
-    }
-    for row in rows:
-        for key, field in [
-            ("by_rule", "rule_id"),
-            ("by_severity", "severity"),
-            ("by_source_system", "source_system"),
-        ]:
-            val = row.get(field, "unknown")
-            stats[key][val] = stats[key].get(val, 0) + 1
-        status = row.get("remediation_status", "OPEN")
-        stats["by_status"][status] = stats["by_status"].get(status, 0) + 1
-        if row.get("breach_notification_candidate"):
-            stats["breach_candidates"] += 1
-    return stats
+    return get_store().stats(org_id)       # counted by the database: no record is decrypted
 
 
 # ---------------------------------------------------------------------------

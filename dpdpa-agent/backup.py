@@ -96,6 +96,8 @@ def _consistent_copy(src: Path, tmpdir: Path) -> Path:
         target = sqlite3.connect(dst)
         try:
             source.backup(target)
+            # the live databases use write-ahead logging; a backup must be one self-contained file
+            target.execute("PRAGMA journal_mode=DELETE")
         finally:
             target.close()
     finally:
@@ -406,6 +408,11 @@ def restore_backup(backup_path: Path, *, dry_run: bool = False,
                 _remove(root / t)
                 if (safety / t).exists():
                     _copy_in(safety / t, root / t)
+                if t.endswith(".db"):                     # a database's write-ahead log goes back with it
+                    for suffix in _DB_SIDECARS:
+                        _remove(root / (t + suffix))
+                        if (safety / (t + suffix)).exists():
+                            shutil.copy2(safety / (t + suffix), root / (t + suffix))
             except Exception as e:                       # pragma: no cover - last resort
                 result["errors"].append(f"ROLLBACK PROBLEM for {t}: {e}. Your previous data is in {safety}")
 
