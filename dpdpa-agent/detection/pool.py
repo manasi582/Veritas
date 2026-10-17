@@ -100,8 +100,13 @@ def configured_queue_limit(workers: int) -> int:
 
 # ---------------------------------------------------------------- what runs inside a worker
 
-def _init_worker() -> None:
+_BARRIER = None
+
+
+def _init_worker(barrier=None) -> None:
     """Load the language model once per worker, before the first event arrives."""
+    global _BARRIER
+    _BARRIER = barrier
     from detection.analyzer_engine import get_analyzer_engine
     get_analyzer_engine()
 
@@ -113,8 +118,14 @@ def worker_detect(event, validators):
 
 
 def _warm(_=None) -> int:
+    """
+    One warm-up job per worker. Each waits at a barrier until every worker has one, so no worker can take
+    two of them: when they all pass, every worker has finished loading its model.
+    """
     from detection.analyzer_engine import analyze_text
     analyze_text("Warm-up line for Rahul Sharma, phone +91 98765 43210")
+    if _BARRIER is not None:
+        _BARRIER.wait(timeout=600)
     return os.getpid()
 
 
@@ -145,7 +156,9 @@ class DetectionPool:
     def _make_executor(self) -> Executor:
         if self.workers > 0:
             ctx = multiprocessing.get_context("spawn")        # no fork from a running web server
-            return ProcessPoolExecutor(max_workers=self.workers, mp_context=ctx, initializer=self._initializer)
+            initargs = (ctx.Barrier(self.workers),) if self._initializer is not None else ()
+            return ProcessPoolExecutor(max_workers=self.workers, mp_context=ctx,
+                                       initializer=self._initializer, initargs=initargs)
         return ThreadPoolExecutor(max_workers=1, thread_name_prefix="veritas-detect")
 
     def start(self) -> None:

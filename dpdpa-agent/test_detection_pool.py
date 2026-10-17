@@ -18,6 +18,20 @@ def crash_detect(event, validators):
     os._exit(1)            # the worker dies without answering
 
 
+_B = None
+
+
+def barrier_init(barrier):
+    global _B
+    _B = barrier
+    time.sleep(0.3)                    # a worker that takes a while to become ready
+
+
+def barrier_warm(_=None):
+    _B.wait(timeout=60)
+    return os.getpid()
+
+
 def make(workers, queue=5, target=slow_detect):
     return DetectionPool(workers, queue, target=target, initializer=None, warm=None)
 
@@ -125,3 +139,15 @@ def test_a_worker_that_dies_is_replaced_and_the_event_is_not_lost():
     finally:
         pool.shutdown()
     assert out["n"] == 2 and pool.stats()["restarts"] >= 1 and pool.stats()["in_flight"] == 0
+
+
+def test_start_up_waits_until_every_worker_is_ready_and_counts_each_once():
+    pool = DetectionPool(3, 10, target=slow_detect, initializer=barrier_init, warm=barrier_warm)
+    try:
+        pool.start()
+        deadline = time.time() + 60
+        while pool.ready_workers < 3 and time.time() < deadline:
+            time.sleep(0.1)
+        assert pool.ready_workers == 3, pool.stats()      # three different processes answered, not one twice
+    finally:
+        pool.shutdown()
