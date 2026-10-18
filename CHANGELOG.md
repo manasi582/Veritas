@@ -2,7 +2,7 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
-## Unreleased
+## 1.0.28
 
 - **Documentation:** administrator runbook (`docs/RUNBOOK.md`), security overview for customer questionnaires (`docs/SECURITY_OVERVIEW.md`), and drafts of the license agreement, support policy and data handling statement (`docs/legal/`, for legal review).
 
