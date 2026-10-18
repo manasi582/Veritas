@@ -45,7 +45,7 @@ Last updated: 2026-10-14. Latest release: **v1.0.22**.
 | Simulated enterprise environment | Planned (`veritas-demo/SIMULATION_PLAN.md`); a teammate will build it |
 | macOS signing and notarization | Parked until an Apple Developer account exists |
 | Windows: fingerprint v2, an agent package | Open |
-| Sanitization mode B | Needs design decisions |
+| Sanitization mode B | Designed (`docs/SANITIZATION_DESIGN.md`); built on request |
 | Offline hardening | Planned: bundle fonts and the PDF library locally |
 | Support email, a separate CI signing key, other items | Listed in the backlog in `IMPLEMENTATION_ORDER.md` |
 
