@@ -239,3 +239,13 @@ class TestInsecureWarningNoise:
             warnings.resetwarnings()
             agent._tls_verify({"tls": {"verify": True}})
             assert not self._ignored(warnings, urllib3.exceptions.InsecureRequestWarning)
+
+
+class TestDockerSourceExplainsItself:
+    def test_a_mac_is_told_to_use_a_file_source(self, monkeypatch):
+        monkeypatch.setattr(agent.sys, "platform", "darwin")
+        assert "file source" in agent.docker_unreachable_hint()
+
+    def test_linux_is_told_about_the_docker_group(self, monkeypatch):
+        monkeypatch.setattr(agent.sys, "platform", "linux")
+        assert "docker group" in agent.docker_unreachable_hint()

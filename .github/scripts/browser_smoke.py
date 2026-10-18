@@ -42,6 +42,7 @@ NEW_USER_PW = "Orchid-Lantern#9753"
 TIMEOUT = 20_000
 
 js_errors: list[str] = []
+outside_requests: list[str] = []      # anything the dashboard asked for from beyond this machine
 console_errors: list[str] = []
 
 
@@ -49,7 +50,14 @@ def step(msg: str) -> None:
     print(f"\n==> {msg}", flush=True)
 
 
+def _leaves_this_machine(url: str) -> bool:
+    from urllib.parse import urlparse
+    u = urlparse(url)
+    return u.scheme in ("http", "https", "ws", "wss") and u.hostname not in ("localhost", "127.0.0.1", "::1")
+
+
 def watch(page: Page, name: str) -> None:
+    page.on("request", lambda r: outside_requests.append(f"[{name}] {r.url}") if _leaves_this_machine(r.url) else None)
     page.on("pageerror", lambda e: js_errors.append(f"[{name}] {e}"))
     page.on("console", lambda m: console_errors.append(f"[{name}] {m.text}")
             if m.type == "error" and "Failed to load resource" not in m.text else None)
@@ -309,6 +317,10 @@ def run(pages: list) -> int:
     print("\nconsole errors seen (informational):", *console_errors, sep="\n  ")
     if js_errors:
         print("\nFAIL: uncaught JavaScript errors:", *js_errors, sep="\n  ", file=sys.stderr)
+        return 1
+    if outside_requests:
+        # an air-gapped customer must see no request that leaves the machine (no fonts, scripts, maps or analytics)
+        print("\nFAIL: the dashboard asked for resources from outside this machine:", *sorted(set(outside_requests)), sep="\n  ", file=sys.stderr)
         return 1
     print("\nBROWSER SMOKE TEST PASSED")
     return 0

@@ -2,6 +2,12 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
+## Unreleased
+
+- **Ubuntu agent upgrade fixed:** upgrading the agent package stopped the agent and never started it again, so an upgraded agent sat silent until someone noticed. An agent that has registered is now started again after an upgrade, and the install test checks it: same identity, same configuration, running, and still delivering. (The Mac agent package already did this.)
+- **Mac agent and Docker:** when the agent cannot reach Docker it now says what to do (on a Mac: write the container's logs to a file and use a file source).
+- **No outside requests:** the browser test now fails if the dashboard ever asks for anything from outside the machine (fonts, scripts, analytics), which is what an air-gapped customer needs; today it asks for nothing.
+
 ## 1.0.26
 
 (Measured on a shared 4-core test machine: about 90 events per second with detection in one thread, about 185 with 2 worker processes and about 300 with 3; nothing lost. See docs/OPERATIONS.md, Capacity.)

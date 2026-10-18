@@ -11,9 +11,17 @@ fi
 chown -R veritas-agent:veritas-agent /opt/veritas-agent /etc/veritas-agent
 chmod 640 /etc/veritas-agent/config.yaml
 
-# Enable systemd service (don't start — user must configure first)
+# Enable systemd service. A first install does not start it (the administrator must configure it first).
 systemctl daemon-reload
 systemctl enable veritas-agent
+
+# An upgrade (prerm stopped the agent) or a refused upgrade (abort-upgrade) must bring an agent that is already
+# set up back; "set up" means it has registered and saved its identity.
+if { [ "$1" = "configure" ] && [ -n "$2" ]; } || [ "$1" = "abort-upgrade" ]; then
+    if [ -s /var/lib/veritas-agent/.veritas_state.json ]; then
+        systemctl start veritas-agent || true
+    fi
+fi
 
 echo ""
 echo "Veritas Agent installed successfully!"

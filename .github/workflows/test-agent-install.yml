@@ -198,6 +198,26 @@ jobs:
           source .github/scripts/agent_ci_lib.sh
           $E2E verify-chain
 
+      # ── Upgrade ──────────────────────────────────────────────────────────
+      - name: Upgrading the package keeps the identity and the configuration, and the agent keeps running
+        run: |
+          source .github/scripts/agent_ci_lib.sh
+          BEFORE=$(agent_ids)
+          sudo md5sum /etc/veritas-agent/config.yaml > /tmp/agent-config.md5
+          bash package/build-agent-deb.sh 99.0.0-ci all
+          sudo apt-get install -y ./dist/veritas-agent_99.0.0-ci_all.deb
+          test "$(veritas-agent version)" = "Veritas Agent 99.0.0-ci" || { echo "the upgrade did not install: $(veritas-agent version)"; exit 1; }
+          # nobody started it again: the package must have
+          for i in $(seq 1 30); do systemctl is-active --quiet veritas-agent && break; sleep 2; done
+          systemctl is-active --quiet veritas-agent || { echo "the agent was left stopped by the upgrade"; sudo journalctl -u veritas-agent --no-pager | tail -20; exit 1; }
+          $E2E wait-agent --label ci-agent --version 99.0.0-ci --timeout 90
+          AFTER=$(agent_ids)
+          [ "$BEFORE" = "$AFTER" ] || { echo "the agent registered again after the upgrade: $BEFORE then $AFTER"; exit 1; }
+          sudo md5sum -c /tmp/agent-config.md5 || { echo "the upgrade changed the agent's configuration"; exit 1; }
+          agent_log_has "Using existing identity" || { echo "the agent did not reuse its saved identity"; exit 1; }
+          append_log app.log "DEBUG after upgrade, phone 9012345678"
+          expect_new_violations 12
+
       # ── Removal ──────────────────────────────────────────────────────────
       - name: Uninstall and purge
         run: |

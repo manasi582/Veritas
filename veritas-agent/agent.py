@@ -1261,6 +1261,14 @@ def tail_glob(
 # Source: Docker container log tail
 # ---------------------------------------------------------------------------
 
+def docker_unreachable_hint() -> str:
+    """What to do when the agent cannot reach Docker. On a Mac the service account cannot use Docker Desktop."""
+    if sys.platform == "darwin":
+        return ("On macOS the agent runs as its own account and cannot use Docker Desktop's socket. Write the "
+                "container's logs to a file (docker logs -f NAME >> /var/log/myapp/NAME.log) and use a file source.")
+    return "Check that the Docker socket is readable by the agent's account (add it to the docker group)."
+
+
 def tail_docker(
     container_name: str,
     source_system: str,
@@ -1282,8 +1290,9 @@ def tail_docker(
         client    = docker.from_env()
         container = client.containers.get(container_name)
     except Exception as e:
-        SOURCES.update("docker", container_name, state="error", detail=f"cannot reach container: {e}"[:200])
-        logger.error("Cannot connect to Docker or find container '%s': %s — skipping", container_name, e)
+        hint = docker_unreachable_hint()
+        SOURCES.update("docker", container_name, state="error", detail=f"cannot reach container: {e} {hint}".strip()[:300])
+        logger.error("Cannot connect to Docker or find container '%s': %s — skipping. %s", container_name, e, hint)
         return
 
     SOURCES.update("docker", container_name, state="reading", detail="")
