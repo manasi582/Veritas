@@ -2,7 +2,7 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
-## Unreleased
+## 1.0.26
 
 (Measured on a shared 4-core test machine: about 90 events per second with detection in one thread, about 185 with 2 worker processes and about 300 with 3; nothing lost. See docs/OPERATIONS.md, Capacity.)
 
