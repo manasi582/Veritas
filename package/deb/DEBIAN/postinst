@@ -25,8 +25,9 @@ fi
 rm -f /var/lib/veritas/.config.env.keep
 
 # Fix ownership — || true so upgrade doesn't fail on locked files
-chown -R veritas:veritas /opt/veritas /var/lib/veritas /var/log/veritas \
-    /etc/veritas 2>/dev/null || true
+# The program belongs to root: the service account must not be able to replace its own binary.
+chown -R root:root /opt/veritas 2>/dev/null || true
+chown -R veritas:veritas /var/lib/veritas /var/log/veritas /etc/veritas 2>/dev/null || true
 chmod 700 /var/lib/veritas
 chmod 755 /var/lib/veritas/tmp
 

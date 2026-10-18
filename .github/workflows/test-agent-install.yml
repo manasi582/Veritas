@@ -166,6 +166,11 @@ jobs:
           $E2E wait-agent --label ci-agent --source "later.log=reading" --timeout 60
 
       # ── Restart and outage ───────────────────────────────────────────────
+      - name: The agent's program belongs to root
+        run: |
+          test "$(stat -c %U /opt/veritas-agent/agent.py)" = "root" || { echo "agent program not owned by root"; ls -l /opt/veritas-agent; exit 1; }
+          if sudo -u veritas-agent sh -c 'echo x >> /opt/veritas-agent/agent.py' 2>/dev/null; then echo "the agent's account can change its own code"; exit 1; fi
+
       - name: Restart keeps the identity (no second registration)
         run: |
           source .github/scripts/agent_ci_lib.sh

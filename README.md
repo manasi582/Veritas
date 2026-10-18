@@ -43,7 +43,10 @@ Step-by-step guides:
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Running it: backups and restore, certificates, license renewal, users and passwords, failed sign-ins |
 | [docs/CUSTOMER_ONBOARDING.md](docs/CUSTOMER_ONBOARDING.md) | For the vendor: onboarding a customer from fingerprint to first agent |
 | [docs/UBUNTU_TEST_CHECKLIST.md](docs/UBUNTU_TEST_CHECKLIST.md) | An end-to-end acceptance test someone can run on an Ubuntu machine |
+| [docs/RUNBOOK.md](docs/RUNBOOK.md) | What to do when something is wrong, by symptom |
+| [docs/SECURITY_OVERVIEW.md](docs/SECURITY_OVERVIEW.md) | For a customer's security team: how Veritas handles data, access and releases |
 | [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md) | Threat model and review package for a security reviewer |
+| [docs/legal/](docs/legal/README.md) | Drafts of the license agreement, support policy and data handling statement (for legal review) |
 
 ## How it works, in one paragraph
 

@@ -20,7 +20,9 @@ fi
 rm -f /var/lib/veritas-agent/.config.yaml.keep
 
 # Permissions
-chown -R veritas-agent:veritas-agent /opt/veritas-agent /etc/veritas-agent
+# The program belongs to root: the agent's account must not be able to change the code it runs as.
+chown -R root:root /opt/veritas-agent
+chown -R veritas-agent:veritas-agent /etc/veritas-agent
 chmod 640 /etc/veritas-agent/config.yaml
 
 # Enable systemd service. A first install does not start it (the administrator must configure it first).

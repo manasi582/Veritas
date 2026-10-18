@@ -163,6 +163,12 @@ jobs:
           test "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:8000/api/auth/me)" = "401"
           curl -sk https://localhost:8000/ready | python3 -m json.tool || true
 
+      - name: The program belongs to root, the data to the service account
+        run: |
+          test "$(stat -c %U /opt/veritas/veritas-runtime)" = "root" || { echo "program not owned by root"; ls -l /opt/veritas; exit 1; }
+          test "$(sudo stat -c %U /var/lib/veritas)" = "veritas" || { echo "data not owned by the service account"; exit 1; }
+          if sudo -u veritas sh -c 'echo x >> /opt/veritas/veritas-runtime' 2>/dev/null; then echo "the service account can change its own program"; exit 1; fi
+
       - name: Acceptance check command
         run: sudo veritas check
 
