@@ -239,3 +239,45 @@ jobs:
       - name: Remove secrets
         if: always()
         run: rm -f /tmp/ci_private_key.pem /tmp/vdata/veritas.vlic
+
+  migration-from-previous-release:
+    name: Upgrading from the previous release keeps the agent's configuration
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the previous release and configure it
+        run: |
+          PREV=$(gh api "repos/${{ github.repository }}/releases" --jq '[.[] | select(.draft == false and .tag_name != "'"$GITHUB_REF_NAME"'") | .tag_name][0]')
+          echo "previous release: $PREV"
+          curl -fL --retry 3 -o /tmp/prev.deb "https://github.com/${{ github.repository }}/releases/download/$PREV/veritas-agent_${PREV#v}_all.deb"
+          sudo apt-get install -y /tmp/prev.deb
+          sudo tee /etc/veritas-agent/config.yaml >/dev/null <<'CFG'
+          veritas_address: https://ci.example.invalid:8000
+          registration_key: "not-a-real-key"
+          source_label: keep-me
+          sources: []
+          CFG
+          # the agent had registered once: its identity file exists
+          sudo mkdir -p /var/lib/veritas-agent
+          echo '{"agent_id":"VERITAS-AGENT-TEST"}' | sudo tee /var/lib/veritas-agent/.veritas_state.json >/dev/null
+          sudo md5sum /etc/veritas-agent/config.yaml > /tmp/agent-config.md5
+
+      - name: Upgrade to the package built from this commit
+        run: |
+          bash package/build-agent-deb.sh 99.0.0-ci all
+          sudo apt-get install -y ./dist/veritas-agent_99.0.0-ci_all.deb
+          test "$(veritas-agent version)" = "Veritas Agent 99.0.0-ci" || { echo "the upgrade did not install"; exit 1; }
+          sudo md5sum -c /tmp/agent-config.md5 || { echo "the upgrade replaced the agent's configuration"; sudo cat /etc/veritas-agent/config.yaml; exit 1; }
+          sudo test -s /var/lib/veritas-agent/.veritas_state.json || { echo "the upgrade removed the agent's identity"; exit 1; }
+          sudo test ! -e /var/lib/veritas-agent/.config.yaml.keep || { echo "the kept copy was left behind"; exit 1; }
+
+      - name: A first install still gets the example configuration
+        run: |
+          sudo apt-get purge -y veritas-agent
+          sudo apt-get install -y ./dist/veritas-agent_99.0.0-ci_all.deb
+          sudo grep -q "veritas_address" /etc/veritas-agent/config.yaml || { echo "a fresh install has no configuration to edit"; exit 1; }
+          test "$(sudo stat -c '%U' /etc/veritas-agent/config.yaml)" = "veritas-agent"

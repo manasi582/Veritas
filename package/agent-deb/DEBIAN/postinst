@@ -7,6 +7,18 @@ if ! id veritas-agent &>/dev/null; then
         --home-dir /opt/veritas-agent veritas-agent
 fi
 
+# The configuration belongs to the administrator: created once from the example, never replaced by an upgrade.
+# (A copy kept by preinst is put back if the old package's removal took the file away.)
+mkdir -p /etc/veritas-agent
+if [ ! -e /etc/veritas-agent/config.yaml ]; then
+    if [ -f /var/lib/veritas-agent/.config.yaml.keep ]; then
+        cp -p /var/lib/veritas-agent/.config.yaml.keep /etc/veritas-agent/config.yaml
+    elif [ -f /usr/share/veritas-agent/config.yaml.example ]; then
+        cp /usr/share/veritas-agent/config.yaml.example /etc/veritas-agent/config.yaml
+    fi
+fi
+rm -f /var/lib/veritas-agent/.config.yaml.keep
+
 # Permissions
 chown -R veritas-agent:veritas-agent /opt/veritas-agent /etc/veritas-agent
 chmod 640 /etc/veritas-agent/config.yaml

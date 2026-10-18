@@ -30,6 +30,7 @@ mkdir -p /tmp/veritas-agent-deb/var/log/veritas-agent
 
 # Fix permissions on control scripts
 chmod 755 /tmp/veritas-agent-deb/DEBIAN/postinst
+chmod 755 /tmp/veritas-agent-deb/DEBIAN/preinst
 chmod 755 /tmp/veritas-agent-deb/DEBIAN/prerm
 chmod 755 /tmp/veritas-agent-deb/DEBIAN/postrm
 chmod 755 /tmp/veritas-agent-deb/usr/bin/veritas-agent

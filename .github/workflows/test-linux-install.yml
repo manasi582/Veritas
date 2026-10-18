@@ -276,6 +276,9 @@ jobs:
           test -n "$VERITAS_SETUP_CODE" || { echo "no setup code"; exit 1; }
           python3 .github/scripts/upgrade_check.py seed
           BEFORE=$(sudo veritas backups | grep -c veritas-backup || true)
+          # the previous release shipped the settings file inside its package: an upgrade must keep what the
+          # administrator wrote in it
+          echo "VERITAS_BACKUP_KEEP=5" | sudo tee -a /etc/veritas/config.env >/dev/null
           # the release built from this commit, numbered above the previous one so it counts as an upgrade
           bash package/build-deb.sh dpdpa-agent/dist/veritas-runtime 99.0.0-ci amd64 >/dev/null
           sudo apt-get install -y ./dist/veritas_99.0.0-ci_amd64.deb
@@ -285,6 +288,7 @@ jobs:
           sudo veritas license /tmp/bound.vlic
           up || { echo "new release did not start after the upgrade"; sudo journalctl -u veritas --no-pager | tail -40; exit 1; }
           python3 .github/scripts/upgrade_check.py verify
+          sudo grep -qx "VERITAS_BACKUP_KEEP=5" /etc/veritas/config.env || { echo "the upgrade replaced the settings file"; sudo cat /etc/veritas/config.env; exit 1; }
           AFTER=$(sudo veritas backups | grep -c veritas-backup || true)
           [ "$AFTER" -gt "$BEFORE" ] || { echo "no backup was made before the upgrade ($BEFORE before, $AFTER after)"; exit 1; }
           sudo veritas verify-backup "$(sudo veritas backups | awk 'NR==1{print $1}')" | grep -q "VERIFIED OK"

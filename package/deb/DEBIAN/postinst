@@ -11,7 +11,18 @@ if ! id veritas &>/dev/null 2>&1; then
 fi
 
 # Create runtime directories (idempotent)
-mkdir -p /var/lib/veritas /var/lib/veritas/tmp /var/log/veritas
+mkdir -p /var/lib/veritas /var/lib/veritas/tmp /var/log/veritas /etc/veritas
+
+# The settings file belongs to the administrator: created once from the example, never replaced by an
+# upgrade. (A copy kept by preinst is put back if the old package's removal took the file away.)
+if [ ! -e /etc/veritas/config.env ]; then
+    if [ -f /var/lib/veritas/.config.env.keep ]; then
+        cp -p /var/lib/veritas/.config.env.keep /etc/veritas/config.env
+    elif [ -f /usr/share/veritas/config.env.example ]; then
+        cp /usr/share/veritas/config.env.example /etc/veritas/config.env
+    fi
+fi
+rm -f /var/lib/veritas/.config.env.keep
 
 # Fix ownership — || true so upgrade doesn't fail on locked files
 chown -R veritas:veritas /opt/veritas /var/lib/veritas /var/log/veritas \

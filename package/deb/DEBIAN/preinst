@@ -13,6 +13,13 @@ RUNTIME=/opt/veritas/veritas-runtime
 [ "$1" = "upgrade" ] || exit 0
 OLD_VERSION="$2"
 
+# Earlier packages shipped /etc/veritas/config.env as part of the package, so the upgrade would remove or
+# replace the administrator's settings. Keep a copy; postinst puts it back. (This package ships only an example.)
+if [ -f /etc/veritas/config.env ]; then
+    mkdir -p "$DATA_DIR" && chmod 700 "$DATA_DIR" 2>/dev/null || true
+    cp -p /etc/veritas/config.env "$DATA_DIR/.config.env.keep"
+fi
+
 # 1. Downgrade guard. Allow it on purpose with:  sudo touch /var/lib/veritas/ALLOW_DOWNGRADE
 if [ -n "$OLD_VERSION" ] && dpkg --compare-versions "$NEW_VERSION" lt "$OLD_VERSION"; then
     if [ -e "$DATA_DIR/ALLOW_DOWNGRADE" ]; then

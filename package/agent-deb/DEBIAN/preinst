@@ -1,0 +1,11 @@
+#!/bin/bash
+# Veritas agent pre-install script.
+# Earlier packages shipped /etc/veritas-agent/config.yaml as part of the package, so an upgrade replaced the
+# administrator's configuration with the template and the agent stopped on "veritas_address is still a
+# placeholder". Keep a copy; postinst puts it back. (This package ships only an example.)
+set -e
+if [ -f /etc/veritas-agent/config.yaml ]; then
+    mkdir -p /var/lib/veritas-agent && chmod 700 /var/lib/veritas-agent 2>/dev/null || true
+    cp -p /etc/veritas-agent/config.yaml /var/lib/veritas-agent/.config.yaml.keep
+fi
+exit 0
