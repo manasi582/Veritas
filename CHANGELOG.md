@@ -2,7 +2,7 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
-## Unreleased
+## 1.0.27
 
 - **Ubuntu upgrades no longer replace your settings (important):** the Ubuntu server package shipped `/etc/veritas/config.env`, and the agent package shipped `/etc/veritas-agent/config.yaml`, as part of the package, so every upgrade put the default file back. For the agent that meant the address and registration key were gone and the agent stopped ("veritas_address is still a placeholder"); for the server it meant alert, mail, metrics and capacity settings were lost. Both files are now created once from an example under `/usr/share` and never touched again; the first upgrade from an older package keeps a copy of your file and puts it back. The install tests upgrade from the real previous release and check the file is unchanged. **If you upgraded an Ubuntu agent or server to 1.0.26 or earlier, check these files.** (The macOS packages were not affected.)
 - **Ubuntu agent upgrade fixed:** upgrading the agent package stopped the agent and never started it again, so an upgraded agent sat silent until someone noticed. An agent that has registered is now started again after an upgrade, and the install test checks it: same identity, same configuration, running, and still delivering. (The Mac agent package already did this.)
