@@ -176,6 +176,26 @@ def _compute_hash(payload_json: str, previous_hash: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+class _Writer:
+    """Context manager: holds the store's write lock, commits on success, rolls back on error."""
+    def __init__(self, store):
+        self._store = store
+
+    def __enter__(self):
+        self._store._lock.acquire()
+        return self._store._conn
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            if exc_type is None:
+                self._store._conn.commit()
+            else:
+                self._store._conn.rollback()
+        finally:
+            self._store._lock.release()
+        return False
+
+
 class EvidenceStore:
     """
     Append-only, hash-chained SQLite Evidence Store. Every chain, and every
@@ -431,6 +451,47 @@ class EvidenceStore:
         )
         row = cursor.fetchone()
         return row["row_hash"] if row else GENESIS_HASH
+
+    def tenants(self) -> List[str]:
+        """Every organization that has at least one record (used by the anchoring scheduler)."""
+        return [r["tenant_id"] for r in self._conn.execute(
+            "SELECT DISTINCT tenant_id FROM evidence WHERE tenant_id IS NOT NULL AND tenant_id != '' ORDER BY tenant_id")]
+
+    def chain_head(self, tenant_id: str) -> dict:
+        """{"last_seq", "head_hash", "record_count"} of the organization's chain (all record types)."""
+        row = self._conn.execute(
+            "SELECT seq, row_hash FROM evidence WHERE tenant_id = ? ORDER BY row_index DESC LIMIT 1", (tenant_id,)).fetchone()
+        n = self._conn.execute("SELECT COUNT(*) AS n FROM evidence WHERE tenant_id = ?", (tenant_id,)).fetchone()["n"]
+        return {"last_seq": row["seq"] if row else 0, "head_hash": row["row_hash"] if row else None, "record_count": n}
+
+    def export_records(self, tenant_id: str):
+        """
+        Yield every record of the organization's chain in order, as the stand-alone verifier reads them. Uses
+        its own read-only connection so a long export never holds up the writer.
+        A version 0 record carries the exact stored text (`payload_json`); a version 1 record carries its
+        canonical `body` (see evidence_store/canonical.py).
+        """
+        conn = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True, timeout=30)
+        conn.row_factory = sqlite3.Row
+        try:
+            cur = conn.execute(
+                "SELECT seq, record_type, hash_version, previous_hash, row_hash, payload_json "
+                "FROM evidence WHERE tenant_id = ? ORDER BY row_index ASC", (tenant_id,))
+            for row in cur:
+                text = decrypt_field(row["payload_json"])
+                rec = {"seq": row["seq"], "record_type": row["record_type"], "hash_version": row["hash_version"],
+                       "prev": row["previous_hash"], "hash": row["row_hash"]}
+                if row["hash_version"] == 0:
+                    rec["payload_json"] = text
+                else:
+                    rec["body"] = json.loads(text)
+                yield rec
+        finally:
+            conn.close()
+
+    def writer(self):
+        """The store's lock and connection, for modules that add their own tables (anchoring). Use: with store.writer() as conn."""
+        return _Writer(self)
 
     def _get_last_seq(self, tenant_id: str) -> int:
         row = self._conn.execute("SELECT MAX(seq) AS m FROM evidence WHERE tenant_id = ?", (tenant_id,)).fetchone()

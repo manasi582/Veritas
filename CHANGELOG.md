@@ -2,6 +2,11 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
+## Unreleased (1.1.0)
+
+- **Evidence format (foundation for the trust features):** records written from now on use a defined, versioned format (`hash_version` 1, documented in `docs/EVIDENCE_FORMAT.md`) so that an independent program can check them; status changes and comments are recorded as events in the chain (who, when, from, to), and the status column is only a cache that the chain check recomputes. Existing records are never rehashed; the first new record continues the old chain. A database is migrated when the server starts, after a private copy is made in the `backups` folder. An older program refuses to start on migrated data (it cannot read the new records).
+- **Anchoring and a stand-alone verifier:** the server can write signed checkpoints of the evidence chain to witnesses it cannot alter (a file share, your SIEM over syslog), and `veritas-verify` checks an evidence export against them with no server and no network, naming the first broken record, a removed tail, a forged or missing checkpoint or a diverging witness. Off until configured (`docs/ANCHORING.md`). New API: `GET /v1/{org}/evidence/export`, `GET /v1/{org}/anchors`, `POST /v1/{org}/anchors/run`, `GET /v1/{org}/anchors/export` and `/pubkey`. The dashboard's health card shows Anchoring and a banner appears if witnessing falls behind. Releases include `veritas-verify` builds for Linux, macOS (Apple silicon) and Windows.
+
 ## 1.0.28
 
 - **Documentation:** administrator runbook (`docs/RUNBOOK.md`), security overview for customer questionnaires (`docs/SECURITY_OVERVIEW.md`), and drafts of the license agreement, support policy and data handling statement (`docs/legal/`, for legal review).

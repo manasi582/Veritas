@@ -194,6 +194,8 @@ app.include_router(integration_router)
 
 from api.agents import router as agents_router  # noqa: E402
 app.include_router(agents_router)
+from api.anchors import router as anchors_router  # noqa: E402
+app.include_router(anchors_router)
 
 
 # ---------------------------------------------------------------------------
@@ -779,6 +781,20 @@ async def system_health(_user: User = Depends(get_current_user)):
     except Exception as e:
         checks["detection"] = {"status": "error", "detail": str(e)}
 
+    # Anchoring: are checkpoints reaching witnesses the server cannot alter?
+    try:
+        from anchoring.checkpoints import get_manager as _anchor_manager
+        _am = _anchor_manager()
+        if _am is None:
+            checks["anchoring"] = {"status": "disabled", "banner": False}
+        else:
+            _st = _am.status()
+            checks["anchoring"] = {"status": "error" if _st["banner"] else "ok", "banner": _st["banner"],
+                                   "single_witness": _st["single_witness"], "witnesses": _st["witnesses"],
+                                   "organizations": _st["orgs"], "problems": _st["problems"]}
+    except Exception as e:
+        checks["anchoring"] = {"status": "error", "banner": False, "detail": str(e)}
+
     # Alerts and metrics: whether anyone would be told (administrator only; see the filter below)
     try:
         import alerts
@@ -811,6 +827,7 @@ async def system_health(_user: User = Depends(get_current_user)):
         keep = {
             "evidence_store": (), "agent_store": ("agents",), "license": ("days_remaining",),
             "tls": ("days_remaining",), "disk": ("free_pct",), "runtime": ("version", "min_agent_version"),
+            "anchoring": ("banner",),
         }
         checks = {
             name: {"status": v.get("status"), **{k: v[k] for k in keep[name] if k in v}}
@@ -856,6 +873,10 @@ async def startup_event():
     asyncio.create_task(broadcaster_task())
     import maintenance
     maintenance.start()      # daily backup and evidence-chain check
+    from anchoring.checkpoints import get_manager as _anchor_manager
+    _am = _anchor_manager()
+    if _am is not None:
+        _am.start()          # checkpoints of the evidence chain, copied to witnesses outside this server
     from detection.pool import get_pool
     pool = get_pool()
     pool.start()             # worker processes load the language model while the server comes up
@@ -865,6 +886,11 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    from anchoring.checkpoints import get_manager as _anchor_manager, reset_manager
+    _am = _anchor_manager()
+    if _am is not None:
+        _am.stop()           # a last checkpoint, so a clean stop leaves nothing unanchored
+    reset_manager()
     from detection.pool import reset_pool
     reset_pool()
 

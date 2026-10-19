@@ -1585,6 +1585,10 @@
     <!-- Page Content -->
     <div class="page-content">
 
+      <div id="anchorBanner" role="alert" style="display:none;background:rgba(220,60,60,0.12);border:1px solid var(--high);color:var(--high);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;">
+        Evidence anchoring has fallen behind: no checkpoint has reached a witness recently, so records written since the last witnessed checkpoint are not protected against tampering by someone with access to this server. Open the Anchoring item in the health card for the cause.
+      </div>
+
       <!-- ====== OVERVIEW TAB ====== -->
       <main class="page-section active" id="main-overview">
         <div class="stats-bar">
@@ -2591,7 +2595,7 @@ async function refreshHealth() {
                     error:'🔴', expired:'🔴', no_cert:'🟡' };
     const labels = {
       evidence_store: 'Evidence Store', agent_store: 'Agent Store',
-      license: 'License', tls: 'TLS', disk: 'Disk', runtime: 'Runtime', maintenance: 'Backups & Chain', alerts: 'Alerts',
+      license: 'License', tls: 'TLS', disk: 'Disk', runtime: 'Runtime', maintenance: 'Backups & Chain', alerts: 'Alerts', anchoring: 'Anchoring',
     };
     container.innerHTML = Object.entries(data.checks).map(([key, val]) => {
       const st    = val.status || 'ok';
@@ -2603,6 +2607,17 @@ async function refreshHealth() {
       else if (key === 'agent_store' && val.agents !== undefined) sub = `${val.agents} agent(s)`;
       else if (key === 'runtime' && val.version) sub = `v${val.version}`;
       else if (key === 'tls' && val.days_remaining != null) sub = `certificate ${val.days_remaining}d left`;
+      else if (key === 'anchoring') {
+        const orgs = Object.values(val.organizations || {});
+        const times = orgs.map(o => o.last_witnessed_at).filter(Boolean).sort();
+        const pend = orgs.reduce((n, o) => n + (o.unanchored_records || 0), 0);
+        sub = val.status === 'disabled' ? 'off (see docs/ANCHORING.md)'
+            : (times.length ? 'last witnessed ' + new Date(times[times.length - 1]).toLocaleString() : 'nothing witnessed yet')
+              + (pend ? ' · ' + pend + ' record(s) not anchored' : '')
+              + (val.single_witness ? ' · one witness only' : '');
+        const banner = document.getElementById('anchorBanner');
+        if (banner) banner.style.display = val.banner ? 'block' : 'none';
+      }
       else if (key === 'alerts') {
         sub = (val.channels && val.channels.length ? val.channels.join(' + ') : 'no channel set')
             + (val.metrics_enabled ? ' · metrics on' : '');

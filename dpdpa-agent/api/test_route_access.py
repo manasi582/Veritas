@@ -68,6 +68,7 @@ VIEWER, AUDITOR, COMPLIANCE_ADMIN, SUPER_ADMIN = (
 ROLE_ORDER = [VIEWER, AUDITOR, COMPLIANCE_ADMIN, SUPER_ADMIN]
 
 MUTATING_MIN_ROLE = {
+    ("POST", "/v1/{org_id}/anchors/run"):                    COMPLIANCE_ADMIN,
     ("POST", "/agents/issue-key"):                           COMPLIANCE_ADMIN,
     ("POST", "/agents/keys/{key_id}/revoke"):                COMPLIANCE_ADMIN,
     ("POST", "/agents/{agent_id}/revoke"):                   COMPLIANCE_ADMIN,
@@ -96,6 +97,10 @@ READ_MIN_ROLE = {
     ("GET", "/api/auth/users/{user_id}/orgs"):    SUPER_ADMIN,
     ("GET", "/api/system/backups"):               SUPER_ADMIN,
     ("GET", "/api/{org_id}/evidence/export"):     AUDITOR,
+    ("GET", "/v1/{org_id}/anchors"):              AUDITOR,
+    ("GET", "/v1/{org_id}/anchors/export"):       AUDITOR,
+    ("GET", "/v1/{org_id}/anchors/pubkey"):       AUDITOR,
+    ("GET", "/v1/{org_id}/evidence/export"):      AUDITOR,
 }
 
 MUTATING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
@@ -385,7 +390,8 @@ class TestSystemHealthIsScopedAndRedacted:
     def test_server_level_detail_is_only_for_the_administrator(self):
         viewer = make_client(VIEWER, orgs=(OWN_ORG,), name="curious")
         checks = viewer.get("/api/system/health").json()["checks"]
-        assert set(checks) <= {"evidence_store", "agent_store", "license", "tls", "disk", "runtime"}
+        assert set(checks) <= {"evidence_store", "agent_store", "license", "tls", "disk", "runtime", "anchoring"}
+        assert set(checks.get("anchoring", {})) <= {"status", "banner"}      # only whether to warn, never where witnesses are
         text = str(checks)
         for secret in ("detail", "fingerprint", "python", "platform", "secrets", "files"):
             assert secret not in text, f"'{secret}' must not reach a non-administrator"

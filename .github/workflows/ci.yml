@@ -50,6 +50,20 @@ jobs:
         run: |
           pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
 
+      # ── The stand-alone evidence verifier (Go): its own tests, and the tamper tests in pytest build it ──
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Verifier unit tests (shared golden vectors)
+        working-directory: tools/veritas-verify
+        run: |
+          gofmt -l . | (! grep .)
+          go vet ./...
+          go test ./...
+        shell: bash
+
       # ── Tests ────────────────────────────────────────────────────────────
       - name: Run test suite
         working-directory: dpdpa-agent
