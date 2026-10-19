@@ -404,12 +404,13 @@ class TestAuditLogCapture:
         )
 
     def test_user_creation_appears_in_audit_log(self, e2e_client):
-        e2e_client.post("/api/auth/users", json={
+        r = e2e_client.post("/api/auth/users", json={
             "username": "audit_test_user",
             "email": "audit@test.io",
-            "password": "NewUser1!",
+            "password": "NewUser1!Audit",      # the password policy needs 10 or more characters
             "role": "VIEWER",
         })
+        assert r.status_code in (200, 201), r.text
 
         entries = self._get_audit_entries(e2e_client)
         actions = [str(entry.get("action", "")) for entry in entries]
