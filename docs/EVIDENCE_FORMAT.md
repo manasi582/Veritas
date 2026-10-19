@@ -30,6 +30,9 @@ The first version 1 record of an organization that already has records continues
 | `VERDICT` | `verdict_id`, `event_id`, `rule_id`, `severity`, `source`, `source_system`, `field`, `timestamp`, `matched_registry_entry` (omitted if none), `breach_notification_candidate` (0/1), `explanation`, `section_cited`, `confidence_permille`, `used_fallback` (0/1) |
 | `STATUS_CHANGE` | `event_id`, `target` (a verdict id), `old_status`, `new_status`, `actor`, `reason` (omitted if none), `at` |
 | `COMMENT` | `event_id`, `target`, `actor`, `text_sha256` (SHA-256 of the comment text, which is stored beside the chain, not in it), `at` |
+| `INCIDENT_EVENT` | `event_id`, `incident_id`, `action` (`STATUS`, `RECUR`, `MERGE`, `SPLIT`), `old_status` and `new_status` (for `STATUS` and `RECUR`), `actor`, `reason` (omitted if none), `other_id` and `moved` (for `MERGE` and `SPLIT`, omitted otherwise), `at` |
+
+An incident's status is `OPEN` until its `STATUS` and `RECUR` events change it (`OPEN` to `ACKNOWLEDGED` or `RESOLVED`, `ACKNOWLEDGED` to `RESOLVED`; `RECUR` takes `RESOLVED` back to `OPEN` and is written by the system). The `incidents` table caches the result and the check compares it. `MERGE` and `SPLIT` are recorded so they cannot be denied; which verdict belongs to which incident is a view over the verdicts and is not signed (see `INCIDENTS.md`).
 
 A verdict's status is its status when written (`OPEN` for new records) followed by its `STATUS_CHANGE` events in order. The `remediation_status` column in the database is only a cache of that result; the check recomputes it and reports a difference as tampering.
 

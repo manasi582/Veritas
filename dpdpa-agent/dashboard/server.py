@@ -196,6 +196,8 @@ from api.agents import router as agents_router  # noqa: E402
 app.include_router(agents_router)
 from api.anchors import router as anchors_router  # noqa: E402
 app.include_router(anchors_router)
+from api.incidents import router as incidents_router  # noqa: E402
+app.include_router(incidents_router)
 
 
 # ---------------------------------------------------------------------------
@@ -877,6 +879,18 @@ async def startup_event():
     _am = _anchor_manager()
     if _am is not None:
         _am.start()          # checkpoints of the evidence chain, copied to witnesses outside this server
+    import threading as _threading
+
+    def _group_older_findings():      # findings stored before incidents existed are grouped once, in the background
+        try:
+            store = get_store()
+            for tenant in store.tenants():
+                n = store.backfill_incidents(tenant)
+                if n:
+                    logger.info("Incidents: grouped %d earlier finding(s) of %s", n, tenant)
+        except Exception:
+            logger.warning("grouping earlier findings failed", exc_info=True)
+    _threading.Thread(target=_group_older_findings, name="incident-backfill", daemon=True).start()
     from detection.pool import get_pool
     pool = get_pool()
     pool.start()             # worker processes load the language model while the server comes up

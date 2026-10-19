@@ -115,6 +115,7 @@ from typing import List, Optional
 
 from db_encryption import decrypt_field, encrypt_field
 from evidence_store import canonical as cn
+from evidence_store import incidents as inc
 from llm_explainer.explainer import ExplainedVerdict
 from schemas.models import RemediationStatus
 
@@ -243,6 +244,7 @@ class EvidenceStore:
             self._migrate_add_summary_columns()
             self._migrate_add_chain_columns()
             self._migrate_add_case_tables()
+            inc.create_tables(self._conn)
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_verdict_id ON evidence(verdict_id)"
             )
@@ -518,7 +520,7 @@ class EvidenceStore:
               datetime.now(timezone.utc).isoformat(), tenant_id, seq, record_type, target))
         return event_id
 
-    def append(self, ev: ExplainedVerdict) -> int:
+    def append(self, ev: ExplainedVerdict, grouping=None) -> int:
         """
         Append an ExplainedVerdict to the store. tenant_id is read from
         ev.verdict.tenant_id (never passed separately — there is exactly one
@@ -526,6 +528,10 @@ class EvidenceStore:
         itself). Chains into that tenant's own previous row (or GENESIS_HASH
         if this is their first). Returns the 0-based row_index of the new row.
         Raises sqlite3.IntegrityError if verdict_id already exists (duplicate).
+
+        `grouping` is (template, hint) of the log line (incidents/template.py): the verdict is then attached to its
+        incident in the same transaction. A failure of the grouping never loses the verdict (it is grouped later by
+        backfill_incidents).
         """
         tenant_id = ev.verdict.tenant_id
         with self._lock:
@@ -562,6 +568,19 @@ class EvidenceStore:
                 seq,
                 status,
             ))
+            if inc.enabled():
+                v = ev.verdict
+                self._conn.execute("SAVEPOINT grouping")
+                try:
+                    inc.attach(self, tenant_id, str(v.verdict_id), v.rule_id.value, v.severity.value,
+                               v.source_system, v.field, bool(v.breach_notification_candidate),
+                               grouping[0] if grouping else inc.LEGACY_TEMPLATE, grouping[1] if grouping else None)
+                    self._conn.execute("RELEASE grouping")
+                except Exception:
+                    logger.warning("grouping failed for verdict %s; it is stored and will be grouped later",
+                                   v.verdict_id, exc_info=True)
+                    self._conn.execute("ROLLBACK TO grouping")
+                    self._conn.execute("RELEASE grouping")
             self._conn.commit()
 
             cursor = self._conn.execute(
@@ -607,6 +626,7 @@ class EvidenceStore:
         expected_previous = GENESIS_HASH
         status = {}           # verdict_id -> replayed status
         cached = {}           # verdict_id -> (cached status, index)
+        incident_status = {}  # incident_id -> replayed status
         for i, row in enumerate(rows):
             plaintext_json = decrypt_field(row["payload_json"])
             signed = json.loads(plaintext_json)
@@ -647,6 +667,9 @@ class EvidenceStore:
             elif rtype == cn.COMMENT:
                 if signed.get("target") not in status:
                     return bad(i, "EVENT_INVALID", row["row_index"])
+            elif rtype == cn.INCIDENT_EVENT:
+                if row["hash_version"] != 1 or not inc.verify_event(signed, incident_status):
+                    return bad(i, "EVENT_INVALID", row["row_index"])
             else:
                 return bad(i, "EVENT_INVALID", row["row_index"])
             expected_previous = row["row_hash"]
@@ -654,6 +677,9 @@ class EvidenceStore:
         for vid, (cache_value, idx) in cached.items():
             if status.get(vid) != cache_value:
                 return bad(idx, "STATUS_CACHE_MISMATCH", rows[idx]["row_index"])
+        for r in self._conn.execute("SELECT incident_id, status FROM incidents WHERE tenant_id = ?", (tenant_id,)):
+            if incident_status.get(r["incident_id"], "OPEN") != r["status"]:
+                return bad(len(rows) - 1, "STATUS_CACHE_MISMATCH", rows[-1]["row_index"])
         return {"valid": True, "first_broken_index": None, "reason": None, "records": len(rows),
                 "head_hash": expected_previous if rows else None}
 
@@ -915,6 +941,35 @@ class EvidenceStore:
             "SELECT * FROM case_comments WHERE verdict_id = ? AND tenant_id = ? ORDER BY created_at DESC",
             (verdict_id, tenant_id)).fetchall()
         return [dict(r) for r in rows]
+
+    # ---- incidents (evidence_store/incidents.py) ---------------------------------------------------------------
+
+    def list_incidents(self, tenant_id: str, **filters):
+        return inc.list_incidents(self, tenant_id, **filters)
+
+    def get_incident(self, tenant_id: str, incident_id: str):
+        return inc.get_incident(self, tenant_id, incident_id)
+
+    def incident_verdicts(self, tenant_id: str, incident_id: str, limit: int = 100, offset: int = 0):
+        return inc.incident_verdicts(self, tenant_id, incident_id, limit, offset)
+
+    def incident_summary(self, tenant_id: str) -> dict:
+        return inc.summary(self, tenant_id)
+
+    def set_incident_status(self, tenant_id: str, incident_id: str, new_status: str,
+                            actor: str = "system", reason: Optional[str] = None) -> dict:
+        return inc.set_status(self, tenant_id, incident_id, new_status, actor, reason)
+
+    def merge_incidents(self, tenant_id: str, source_id: str, target_id: str,
+                        actor: str = "system", reason: Optional[str] = None) -> dict:
+        return inc.merge(self, tenant_id, source_id, target_id, actor, reason)
+
+    def split_incident(self, tenant_id: str, incident_id: str, verdict_ids: list,
+                       actor: str = "system", reason: Optional[str] = None) -> dict:
+        return inc.split(self, tenant_id, incident_id, verdict_ids, actor, reason)
+
+    def backfill_incidents(self, tenant_id: str) -> int:
+        return inc.backfill(self, tenant_id)
 
     def close(self) -> None:
         """Close the SQLite connection."""

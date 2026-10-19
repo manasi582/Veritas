@@ -171,8 +171,20 @@ def flow(browser, pages: list) -> None:
     page.click("button:has-text('Refresh')") if page.locator("#main-agents button:has-text('Refresh')").count() else None
 
     # ── 6. The violation in the ledger: acknowledge, resolve, verify ────
-    step("the violation shows in the Audit Ledger")
+    step("the violation is grouped into an incident in the Audit Ledger")
     page.click("#nav-audit")
+    inc_row = page.locator("#incTbody tr", has_text="EXPOSURE_001").first
+    expect(inc_row).to_be_visible()
+    expect(page.locator("#incSummary")).to_contain_text("incident")
+    shot(page, "05a-incidents")
+    inc_row.locator("button:has-text('Findings')").click()
+    expect(page.locator("#incTbody .inc-detail").first).to_contain_text("Details")
+    inc_row.locator("button:has-text('Acknowledge')").click()
+    expect(page.locator("#toast")).to_contain_text("ACKNOWLEDGED")
+    expect(page.locator("#incTbody .status-badge.ACKNOWLEDGED").first).to_be_visible()
+
+    step("the same finding in the list of all findings")
+    page.click("#viewVerdicts")
     first_row = page.locator("#auditTbody tr", has_text="EXPOSURE_001").first
     expect(first_row).to_be_visible()
     shot(page, "05-ledger")

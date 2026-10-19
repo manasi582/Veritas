@@ -74,6 +74,7 @@ from detection.models import DetectedEvent, MatchedEntity
 from evidence_store.store import get_store
 from investigation import investigate, parse_reference
 import alerts
+from incidents.template import template_of
 from labels import check_label
 from llm_explainer.explainer import ExplainedVerdict, build_deferred_explanation
 from masking import mask_fields, mask_text
@@ -156,6 +157,12 @@ async def _process_event(event: Event, *, write_to_store: bool) -> Dict[str, Any
     verdicts: List[Verdict] = evaluate_event(detected)
 
     store = get_store() if write_to_store else None
+    grouping = None
+    if store is not None and verdicts:
+        try:   # the line's template and root-cause hint, for grouping; a failure here only means "not grouped by wording"
+            grouping = tuple(template_of(event.raw_snippet, detected.matched_entities))
+        except Exception:
+            logger.debug("template failed", exc_info=True)
     explained_and_stored: List[tuple[ExplainedVerdict, bool, Optional[int]]] = []
 
     for v in verdicts:
@@ -164,7 +171,7 @@ async def _process_event(event: Event, *, write_to_store: bool) -> Dict[str, Any
         violation_id: Optional[int] = None
         if store is not None:
             try:
-                store.append(explained)
+                store.append(explained, grouping=grouping)
                 stored = True
                 row = store.get_by_verdict_id(event.tenant_id, str(v.verdict_id))
                 violation_id = row["violation_id"] if row else None

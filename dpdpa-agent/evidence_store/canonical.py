@@ -34,7 +34,8 @@ CHAIN_DOMAIN = "veritas-chain-v1"
 VERDICT = "VERDICT"
 STATUS_CHANGE = "STATUS_CHANGE"
 COMMENT = "COMMENT"
-RECORD_TYPES = (VERDICT, STATUS_CHANGE, COMMENT)
+INCIDENT_EVENT = "INCIDENT_EVENT"
+RECORD_TYPES = (VERDICT, STATUS_CHANGE, COMMENT, INCIDENT_EVENT)
 
 
 # --------------------------------------------------------------------------- canonical JSON
@@ -128,6 +129,19 @@ def comment_body(org: str, seq: int, event_id: str, target: str, actor: str, tex
     """The text itself stays in case_comments; the chain holds its hash."""
     return {"type": COMMENT, "org": org, "seq": seq, "event_id": event_id, "target": target,
             "actor": actor, "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(), "at": rfc3339_ms(at)}
+
+
+def incident_event_body(org: str, seq: int, event_id: str, incident_id: str, action: str, old: Optional[str],
+                        new: Optional[str], actor: str, reason: Optional[str], at: datetime,
+                        other_id: Optional[str] = None, moved: Optional[int] = None) -> Dict[str, Any]:
+    """
+    A change to an incident: STATUS (an analyst), RECUR (the system reopened a resolved incident), MERGE (`other_id`
+    was folded into `incident_id`) or SPLIT (`moved` verdicts of `other_id` became `incident_id`). Only status
+    changes are replayed by the verifier of the chain; merge and split are recorded so they cannot be denied.
+    """
+    return {"type": INCIDENT_EVENT, "org": org, "seq": seq, "event_id": event_id, "incident_id": incident_id,
+            "action": action, "old_status": old, "new_status": new, "actor": actor, "reason": reason or None,
+            "other_id": other_id, "moved": moved, "at": rfc3339_ms(at)}
 
 
 def legacy_view(body: Dict[str, Any]) -> Dict[str, Any]:

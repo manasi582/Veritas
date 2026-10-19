@@ -271,3 +271,21 @@ def test_a_chain_of_thousands_of_old_records_continued_by_new_ones_verifies(veri
     assert code == 1 and "HASH_MISMATCH" in codes(out)
     assert [f["seq"] for f in out["findings"] if f["code"] == "HASH_MISMATCH"] == [100]
     store.close()
+
+
+def test_incident_events_in_the_chain_pass_the_stand_alone_verifier(tmp_path, verifier, monkeypatch):
+    monkeypatch.setenv("VERITAS_INCIDENT_GRACE_SECONDS", "0")
+    (tmp_path / "inc").mkdir()
+    w = World(tmp_path / "inc")
+    try:
+        w.add(6)
+        (row,), _ = w.store.list_incidents(ORG)
+        w.store.set_incident_status(ORG, row["incident_id"], "RESOLVED", actor="asha", reason="fixed")
+        w.add(1)                                            # the same finding again: the system reopens it
+        assert w.store.get_incident(ORG, row["incident_id"])["recurred"] is True
+        w.manager.checkpoint_now(ORG)
+        d = w.files("inc_out")
+        code, out = run(verifier, d)
+        assert code == 0, out
+    finally:
+        w.store.close()

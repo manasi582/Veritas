@@ -575,6 +575,15 @@
       background: var(--btn-primary-hover);
     }
 
+    .view-switch { display: inline-flex; gap: 0; }
+    .view-switch .btn { border-radius: 0; }
+    .view-switch .btn:first-child { border-radius: 6px 0 0 6px; }
+    .view-switch .btn:last-child { border-radius: 0 6px 6px 0; }
+    .view-switch .btn.active { background: var(--accent-blue); color: #fff; }
+    .inc-template { font-family: var(--font-mono); font-size: 12px; color: var(--text-headings); word-break: break-word; }
+    .inc-hint { font-size: 11px; color: var(--text-muted); }
+    .recurred-badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--medium-bg); color: var(--medium); margin-left: 6px; }
+    .inc-detail td { background: rgba(127,127,127,0.06); }
     .btn-secondary {
       background: var(--surface);
       color: var(--text);
@@ -1731,6 +1740,46 @@
           <span style="margin-left:auto;font-size:11.5px;color:var(--text-muted);font-family:var(--font-mono);" id="integrityTime"></span>
         </div>
 
+        <!-- Incidents or every finding -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+          <div class="view-switch" role="tablist" aria-label="Ledger view">
+            <button id="viewIncidents" class="btn btn-secondary" onclick="setLedgerView('incidents')">Incidents</button>
+            <button id="viewVerdicts" class="btn btn-secondary" onclick="setLedgerView('verdicts')">All findings</button>
+          </div>
+          <span id="incSummary" style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);"></span>
+        </div>
+
+        <div id="incidentView">
+          <div class="filters-bar" style="margin-bottom:12px;">
+            <div class="filters-group">
+              <div class="filter-item"><label>Status</label>
+                <select id="i-status" onchange="loadIncidents()">
+                  <option value="">All</option><option value="OPEN">OPEN</option>
+                  <option value="ACKNOWLEDGED">ACKNOWLEDGED</option><option value="RESOLVED">RESOLVED</option>
+                </select></div>
+              <div class="filter-item"><label>Severity</label>
+                <select id="i-severity" onchange="loadIncidents()">
+                  <option value="">All</option><option value="HIGH">HIGH</option>
+                  <option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option>
+                </select></div>
+              <div class="filter-item"><label>Recurred</label>
+                <select id="i-recurred" onchange="loadIncidents()"><option value="">Any</option><option value="1">Recurred only</option></select></div>
+              <div class="filter-item"><button class="btn btn-secondary" onclick="loadIncidents()">Refresh</button></div>
+            </div>
+          </div>
+          <div class="table-container"><div class="table-wrap">
+            <table id="incTable">
+              <thead><tr>
+                <th>#</th><th>Severity</th><th>What happened</th><th>System / owner</th>
+                <th style="text-align:right;">Findings</th><th>First &rarr; last seen</th><th>Last 24 h</th><th>Status</th><th>Action</th>
+              </tr></thead>
+              <tbody id="incTbody"><tr><td colspan="9"><div class="empty" style="box-shadow:none;padding:40px;"><h4>Loading incidents…</h4></div></td></tr></tbody>
+            </table>
+          </div></div>
+          <p style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Findings that are the same kind, in the same place, are one incident. Every finding is still in the evidence chain; "All findings" lists them one by one. Resolving an incident does not change its individual findings.</p>
+        </div>
+
+        <div id="verdictView">
         <!-- Filters Bar -->
         <div class="filters-bar">
           <div class="filters-group">
@@ -1813,6 +1862,7 @@
               </tbody>
             </table>
           </div>
+        </div>
         </div>
       </main>
 
@@ -2665,7 +2715,134 @@ async function refreshOverview() {
 }
 
 // ---- Audit Ledger ----
+let ledgerView = 'incidents';
+try { ledgerView = localStorage.getItem('veritas_ledger_view') || 'incidents'; } catch (e) {}
+
+function setLedgerView(mode) {
+  ledgerView = mode === 'verdicts' ? 'verdicts' : 'incidents';
+  try { localStorage.setItem('veritas_ledger_view', ledgerView); } catch (e) {}
+  loadAuditTable();
+}
+
 async function loadAuditTable() {
+  const inc = ledgerView === 'incidents';
+  document.getElementById('incidentView').style.display = inc ? '' : 'none';
+  document.getElementById('verdictView').style.display = inc ? 'none' : '';
+  document.getElementById('viewIncidents').classList.toggle('active', inc);
+  document.getElementById('viewVerdicts').classList.toggle('active', !inc);
+  if (inc) { loadIncidents(); } else { loadVerdictTable(); }
+}
+
+function sparkline(values) {
+  const w = 96, h = 22, max = Math.max(1, ...values);
+  const pts = values.map((v, i) => `${(i / (values.length - 1) * (w - 2) + 1).toFixed(1)},${(h - 2 - v / max * (h - 4)).toFixed(1)}`).join(' ');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-label="findings per hour, last 24 hours"><polyline fill="none" stroke="currentColor" stroke-width="1.5" points="${pts}"/></svg>`;
+}
+
+let incidentRows = [];
+
+async function loadIncidents() {
+  if (!currentOrgId) return;
+  const params = new URLSearchParams();
+  const st = document.getElementById('i-status').value, sv = document.getElementById('i-severity').value;
+  if (st) params.set('status', st);
+  if (sv) params.set('severity', sv);
+  if (document.getElementById('i-recurred').value) params.set('recurred', 'true');
+  try {
+    const [r, sr] = await Promise.all([
+      fetch(`/v1/${encodeURIComponent(currentOrgId)}/incidents?` + params, { credentials: 'include' }),
+      fetch(`/v1/${encodeURIComponent(currentOrgId)}/incidents/summary`, { credentials: 'include' }),
+    ]);
+    const data = await r.json();
+    const sum = await sr.json();
+    incidentRows = data.incidents || [];
+    document.getElementById('incSummary').textContent =
+      `${(sum.verdicts || 0).toLocaleString()} findings → ${sum.incidents || 0} incident${sum.incidents === 1 ? '' : 's'}` +
+      ` (${(sum.by_status || {}).OPEN || 0} open${sum.recurred ? ', ' + sum.recurred + ' recurred' : ''})`;
+    renderIncidents(incidentRows);
+  } catch (e) {
+    showToast('Failed to load incidents', 'error');
+  }
+}
+
+function renderIncidents(rows) {
+  const tbody = document.getElementById('incTbody');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty" style="box-shadow:none;padding:40px;"><h4>No incidents</h4><p>Nothing matches. Findings appear here as they are grouped.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(i => {
+    const owner = i.owner ? [i.owner.team, i.owner.slack_channel, i.owner.email].filter(Boolean).map(escapeHtml).join(' · ') : '<span style="color:var(--text-muted)">no owner set</span>';
+    const fmt = t => t ? new Date(t).toLocaleString() : '';
+    const id = safeId(i.incident_id);
+    const actions = i.status === 'RESOLVED' ? '' :
+      `<span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN">${i.status === 'OPEN' ? `<button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="setIncidentStatus('${id}','ACKNOWLEDGED')">Acknowledge</button> ` : ''}<button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="setIncidentStatus('${id}','RESOLVED')">Resolve</button></span>`;
+    return `<tr>
+      <td class="mono" style="color:var(--text-headings)">INC-${escapeHtml(i.number)}</td>
+      <td><span class="badge ${safeId(i.severity)}">${escapeHtml(i.severity)}</span>${i.breach_candidate ? ' <span title="breach notification candidate" style="color:var(--breach)">&#9888;</span>' : ''}</td>
+      <td><div class="inc-template">${escapeHtml(i.template)}</div>
+          <div class="inc-hint"><span class="badge rule">${escapeHtml(i.rule_id)}</span> field ${escapeHtml(i.field)}${i.hint ? ' · ' + escapeHtml(i.hint) : ''}</div></td>
+      <td style="font-size:12px;">${escapeHtml(i.source_system)}<div class="inc-hint">${owner}</div></td>
+      <td class="mono" style="text-align:right;color:var(--text-headings)">${Number(i.count).toLocaleString()}</td>
+      <td style="font-size:11.5px;">${fmt(i.first_seen)}<br>${fmt(i.last_seen)}</td>
+      <td style="color:var(--accent-blue)">${sparkline(i.sparkline || [])}</td>
+      <td><span class="status-badge ${safeId(i.status)}">${escapeHtml(i.status)}</span>${i.recurred ? `<span class="recurred-badge" title="reopened ${i.recurred_count} time(s) after being resolved">recurred${i.recurred_count > 1 ? ' ×' + i.recurred_count : ''}</span>` : ''}</td>
+      <td style="white-space:nowrap;">${actions} <button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="toggleIncident('${id}')">Findings</button></td>
+    </tr>
+    <tr class="inc-detail" id="incd-${id}" style="display:none;"><td colspan="9"></td></tr>`;
+  }).join('');
+  if (window.__veritasRole) applyRoleUI(window.__veritasRole);
+}
+
+async function toggleIncident(id) {
+  const row = document.getElementById('incd-' + id);
+  if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+  row.style.display = '';
+  const cell = row.firstElementChild;
+  cell.textContent = 'Loading…';
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/incidents/${id}/verdicts?limit=100`, { credentials: 'include' });
+    const vs = (await r.json()).verdicts || [];
+    const others = incidentRows.filter(i => i.incident_id !== id);
+    cell.innerHTML = `<div style="font-size:12px;margin-bottom:6px;">Showing the latest ${vs.length} findings. Tick some to move them into a new incident, or merge this incident into another.</div>` +
+      vs.map(v => `<div style="display:flex;gap:10px;align-items:center;padding:2px 0;font-size:12px;">
+        <label data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN"><input type="checkbox" class="split-${id}" value="${safeId(v.verdict_id)}"></label>
+        <span class="mono">#${escapeHtml(v.violation_id)}</span><span>${v.timestamp ? new Date(v.timestamp).toLocaleString() : ''}</span>
+        <span class="status-badge ${safeId(v.remediation_status || 'OPEN')}">${escapeHtml(v.remediation_status || 'OPEN')}</span>
+        <button class="btn btn-secondary" style="padding:2px 8px;font-size:11px;" onclick="openDrawer('${safeId(v.verdict_id)}')">Details</button></div>`).join('') +
+      `<div data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-secondary" style="font-size:11px;" onclick="splitIncident('${id}')">Move ticked findings to a new incident</button>
+        <select id="mergeTo-${id}" style="font-size:11px;"><option value="">Merge this incident into…</option>${others.map(o => `<option value="${safeId(o.incident_id)}">INC-${escapeHtml(o.number)} ${escapeHtml((o.template || '').slice(0, 50))}</option>`).join('')}</select>
+        <button class="btn btn-secondary" style="font-size:11px;" onclick="mergeIncident('${id}')">Merge</button></div>`;
+    if (window.__veritasRole) applyRoleUI(window.__veritasRole);
+  } catch (e) { cell.textContent = 'Could not load the findings.'; }
+}
+
+async function incidentPost(id, action, body, done) {
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/incidents/${id}/${action}`, {
+      method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    if (!r.ok) { showToast((await r.json()).detail || 'Update failed', 'error'); return; }
+    showToast(done, 'success');
+    loadIncidents();
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+function setIncidentStatus(id, status) { incidentPost(id, 'status', {status}, `Incident marked ${status}`); }
+
+function splitIncident(id) {
+  const ids = [...document.querySelectorAll('.split-' + id + ':checked')].map(c => c.value);
+  if (!ids.length) { showToast('Tick the findings to move first', 'error'); return; }
+  incidentPost(id, 'split', {verdict_ids: ids}, 'Moved into a new incident');
+}
+
+function mergeIncident(id) {
+  const from = id, into = document.getElementById('mergeTo-' + id).value;
+  if (!into) { showToast('Choose the incident to merge into', 'error'); return; }
+  incidentPost(into, 'merge', {merge_from: from}, 'Incidents merged');
+}
+
+async function loadVerdictTable() {
   if (!currentOrgId) return;
   const system = document.getElementById('f-system').value;
   const severity = document.getElementById('f-severity').value;
@@ -3748,6 +3925,7 @@ async function loadCurrentUser() {
     }
 
     // Apply role-based UI restrictions
+    window.__veritasRole = u.role;
     applyRoleUI(u.role);
     return u;
   } catch (e) {

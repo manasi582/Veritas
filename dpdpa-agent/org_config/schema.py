@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, timezone
-from typing import Any, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -249,6 +249,13 @@ class LinkageRule(BaseModel):
         return v
 
 
+class OrgOwner(BaseModel):
+    """Who looks after a source system: shown on its incidents so a finding reaches a person, not a queue."""
+    team: Optional[str] = Field(default=None, max_length=120)
+    email: Optional[str] = Field(default=None, max_length=200)
+    slack_channel: Optional[str] = Field(default=None, max_length=120)
+
+
 # ---------------------------------------------------------------------------
 # OrgConfig — the top-level org config document
 # ---------------------------------------------------------------------------
@@ -280,6 +287,11 @@ class OrgConfig(BaseModel):
             "Sets of fields that, when co-occurring in one event, constitute "
             "re-identification/linkage risk. Evaluated in Phase 3."
         )
+    )
+
+    owners: Dict[str, OrgOwner] = Field(
+        default_factory=dict,
+        description="Owning team and channel per source_system, shown on incidents. Optional."
     )
 
     @field_validator("org_id", mode="before")
