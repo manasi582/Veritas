@@ -3,3 +3,7 @@
 1d44205754797194df93b57a1c900d54526c7872:INSTALL.md:generic-api-key:345
 # Base64 of the words "your-key...": a placeholder in the Kubernetes guide:
 7ed21bd750281cf9c0f83a9b4f2eb992ce4c2e26:veritas-agent/k8s/README.md:generic-api-key:50
+# Invented values in the support-bundle redaction test (a made-up token, key and JWT that the test expects to be removed):
+86deffb8328b44a9afda3daff79c6ee9ab572285:dpdpa-agent/test_support_bundle.py:jwt:9
+86deffb8328b44a9afda3daff79c6ee9ab572285:dpdpa-agent/test_support_bundle.py:private-key:31
+86deffb8328b44a9afda3daff79c6ee9ab572285:dpdpa-agent/test_support_bundle.py:generic-api-key:65

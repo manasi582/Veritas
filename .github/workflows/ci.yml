@@ -59,7 +59,7 @@ jobs:
       - name: Verifier unit tests (shared golden vectors)
         working-directory: tools/veritas-verify
         run: |
-          gofmt -l . | (! grep .)
+          test -z "$(gofmt -l .)"
           go vet ./...
           go test ./...
         shell: bash
