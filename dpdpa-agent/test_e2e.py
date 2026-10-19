@@ -407,7 +407,7 @@ class TestAuditLogCapture:
         r = e2e_client.post("/api/auth/users", json={
             "username": "audit_test_user",
             "email": "audit@test.io",
-            "password": "NewUser1!Audit",      # the password policy needs 10 or more characters
+            "password": "NewUser1!Zebra",      # the password policy needs 10 or more characters
             "role": "VIEWER",
         })
         assert r.status_code in (200, 201), r.text
