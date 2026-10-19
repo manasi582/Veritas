@@ -1,0 +1,153 @@
+{
+  "description": "hash_version 1: sha256('veritas-chain-v1' LF previous_hash LF canonical_json(body)). The chain below continues the last record of chain_v0.json.",
+  "domain": "veritas-chain-v1",
+  "canonical_cases": [
+    {
+      "name": "keys are sorted and there is no whitespace",
+      "input": {
+        "b": 1,
+        "a": "x",
+        "c": {
+          "z": 2,
+          "y": [
+            1,
+            2
+          ]
+        }
+      },
+      "canonical": "{\"a\":\"x\",\"b\":1,\"c\":{\"y\":[1,2],\"z\":2}}"
+    },
+    {
+      "name": "null members are omitted",
+      "input": {
+        "a": null,
+        "b": "x"
+      },
+      "canonical": "{\"b\":\"x\"}"
+    },
+    {
+      "name": "only quote and backslash are escaped with a backslash",
+      "input": {
+        "s": "say \"hi\" \\ bye"
+      },
+      "canonical": "{\"s\":\"say \\\"hi\\\" \\\\ bye\"}"
+    },
+    {
+      "name": "control characters are written as lowercase \\u00xx",
+      "input": {
+        "s": "a\nb\tc\u0001\u001f"
+      },
+      "canonical": "{\"s\":\"a\\u000ab\\u0009c\\u0001\\u001f\"}"
+    },
+    {
+      "name": "other characters are written as themselves (UTF-8)",
+      "input": {
+        "s": "नमस्ते é   😀 </script> & <"
+      },
+      "canonical": "{\"s\":\"नमस्ते é   😀 </script> & <\"}"
+    },
+    {
+      "name": "object keys are ordered by UTF-8 bytes",
+      "input": {
+        "é": 1,
+        "z": 2,
+        "a": 3,
+        "😀": 4
+      },
+      "canonical": "{\"a\":3,\"z\":2,\"é\":1,\"😀\":4}"
+    },
+    {
+      "name": "integers, including negative and large",
+      "input": {
+        "n": -12,
+        "big": 9007199254740993,
+        "zero": 0
+      },
+      "canonical": "{\"big\":9007199254740993,\"n\":-12,\"zero\":0}"
+    },
+    {
+      "name": "empty containers and nesting",
+      "input": {
+        "e": {},
+        "l": [],
+        "n": [
+          {
+            "a": 1
+          },
+          []
+        ]
+      },
+      "canonical": "{\"e\":{},\"l\":[],\"n\":[{\"a\":1},[]]}"
+    }
+  ],
+  "rejects": [
+    {
+      "name": "a float",
+      "input_json": "{\"c\":0.5}"
+    },
+    {
+      "name": "a boolean",
+      "input_json": "{\"f\":true}"
+    },
+    {
+      "name": "a null in a list",
+      "input_json": "{\"l\":[null]}"
+    }
+  ],
+  "chain": [
+    {
+      "previous_hash": "e6f88699bd06ce30076815b7b3ebb25aa4224901992e1ee8c17ab6579fac8494",
+      "body": {
+        "type": "VERDICT",
+        "org": "retail_co",
+        "seq": 4,
+        "verdict_id": "00000000-0000-4000-8000-000000000004",
+        "event_id": "00000000-0000-4000-8000-0000000000e4",
+        "rule_id": "EXPOSURE_001",
+        "severity": "HIGH",
+        "source": "LOG",
+        "source_system": "order-service",
+        "field": "pan",
+        "timestamp": "2026-10-19T10:15:30.123Z",
+        "breach_notification_candidate": 1,
+        "explanation": "PAN in a log line",
+        "section_cited": "DPDPA 2023 section 8(5)",
+        "confidence_permille": 900,
+        "used_fallback": 0
+      },
+      "canonical": "{\"breach_notification_candidate\":1,\"confidence_permille\":900,\"event_id\":\"00000000-0000-4000-8000-0000000000e4\",\"explanation\":\"PAN in a log line\",\"field\":\"pan\",\"org\":\"retail_co\",\"rule_id\":\"EXPOSURE_001\",\"section_cited\":\"DPDPA 2023 section 8(5)\",\"seq\":4,\"severity\":\"HIGH\",\"source\":\"LOG\",\"source_system\":\"order-service\",\"timestamp\":\"2026-10-19T10:15:30.123Z\",\"type\":\"VERDICT\",\"used_fallback\":0,\"verdict_id\":\"00000000-0000-4000-8000-000000000004\"}",
+      "expected_hash": "1818e62ce1c52f253c20ca8ac17c0823042ab538ab7b74a76a20840465666dfd"
+    },
+    {
+      "previous_hash": "1818e62ce1c52f253c20ca8ac17c0823042ab538ab7b74a76a20840465666dfd",
+      "body": {
+        "type": "STATUS_CHANGE",
+        "org": "retail_co",
+        "seq": 5,
+        "event_id": "00000000-0000-4000-8000-0000000000f5",
+        "target": "00000000-0000-4000-8000-000000000004",
+        "old_status": "OPEN",
+        "new_status": "ACKNOWLEDGED",
+        "actor": "asha",
+        "at": "2026-10-19T10:20:00.000Z"
+      },
+      "canonical": "{\"actor\":\"asha\",\"at\":\"2026-10-19T10:20:00.000Z\",\"event_id\":\"00000000-0000-4000-8000-0000000000f5\",\"new_status\":\"ACKNOWLEDGED\",\"old_status\":\"OPEN\",\"org\":\"retail_co\",\"seq\":5,\"target\":\"00000000-0000-4000-8000-000000000004\",\"type\":\"STATUS_CHANGE\"}",
+      "expected_hash": "1e5ae83dd9beb7f5f0beb8f2e451e2eac6e08d8744bc7e39d7d25a6193cb5465"
+    },
+    {
+      "previous_hash": "1e5ae83dd9beb7f5f0beb8f2e451e2eac6e08d8744bc7e39d7d25a6193cb5465",
+      "body": {
+        "type": "COMMENT",
+        "org": "retail_co",
+        "seq": 6,
+        "event_id": "00000000-0000-4000-8000-0000000000f6",
+        "target": "00000000-0000-4000-8000-000000000004",
+        "actor": "asha",
+        "text_sha256": "bd538462864ae65577da733dc4a8a36944a24f0d3f1af9659a540e18a64f0041",
+        "at": "2026-10-19T10:21:00.000Z"
+      },
+      "canonical": "{\"actor\":\"asha\",\"at\":\"2026-10-19T10:21:00.000Z\",\"event_id\":\"00000000-0000-4000-8000-0000000000f6\",\"org\":\"retail_co\",\"seq\":6,\"target\":\"00000000-0000-4000-8000-000000000004\",\"text_sha256\":\"bd538462864ae65577da733dc4a8a36944a24f0d3f1af9659a540e18a64f0041\",\"type\":\"COMMENT\"}",
+      "expected_hash": "6451275d34019fa90275662d76bc0bfba0cfb8d2f24ce6e7f590845ec2f5d22d"
+    }
+  ]
+}

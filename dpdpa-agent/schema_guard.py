@@ -19,7 +19,7 @@ from typing import Dict, Optional
 
 logger = logging.getLogger("veritas.schema")
 
-SCHEMA_GENERATION = 1
+SCHEMA_GENERATION = 2      # 2: the evidence chain has hash_version 1 records and chained events (evidence_store/canonical.py)
 DATABASES = ("evidence.db", "agents.db", "users.db", "audit.db")
 
 

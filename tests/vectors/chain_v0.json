@@ -1,0 +1,21 @@
+{
+  "description": "hash_version 0: sha256(payload_json + previous_hash), payload_json being the exact string stored. Genesis for a new organization's chain is the constant below. These records are never rehashed.",
+  "genesis": "DPDPA-AGENT-GENESIS-2026",
+  "chain": [
+    {
+      "previous_hash": "DPDPA-AGENT-GENESIS-2026",
+      "payload_json": "{\"breach_notification_candidate\": true, \"confidence\": 0.9, \"explanation\": \"Test explanation\", \"field\": \"pan\", \"rule_id\": \"EXPOSURE_001\", \"severity\": \"HIGH\", \"tenant_id\": \"retail_co\", \"verdict_id\": \"00000000-0000-4000-8000-000000000001\"}",
+      "expected_hash": "0e7e062385b9597737fee8941ad5d5869a0cd74eff246e49c535e54529abb1be"
+    },
+    {
+      "previous_hash": "0e7e062385b9597737fee8941ad5d5869a0cd74eff246e49c535e54529abb1be",
+      "payload_json": "{\"explanation\": \"Aadhaar \\u0928\\u092e\\u0938\\u094d\\u0924\\u0947 in log\", \"field\": \"aadhaar\", \"rule_id\": \"PURPOSE_001\", \"severity\": \"MEDIUM\", \"tenant_id\": \"retail_co\", \"verdict_id\": \"00000000-0000-4000-8000-000000000002\"}",
+      "expected_hash": "2a3f7fa7dd5ead1754a2a1433b47187eab4e06dba54f25205c43c1962d2b381f"
+    },
+    {
+      "previous_hash": "2a3f7fa7dd5ead1754a2a1433b47187eab4e06dba54f25205c43c1962d2b381f",
+      "payload_json": "{\"field\": \"phone\", \"rule_id\": \"RETENTION_001\", \"severity\": \"LOW\", \"tenant_id\": \"retail_co\", \"verdict_id\": \"00000000-0000-4000-8000-000000000003\"}",
+      "expected_hash": "e6f88699bd06ce30076815b7b3ebb25aa4224901992e1ee8c17ab6579fac8494"
+    }
+  ]
+}

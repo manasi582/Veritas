@@ -108,11 +108,13 @@ import json
 import logging
 import sqlite3
 import threading
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
 from db_encryption import decrypt_field, encrypt_field
+from evidence_store import canonical as cn
 from llm_explainer.explainer import ExplainedVerdict
 from schemas.models import RemediationStatus
 
@@ -219,6 +221,7 @@ class EvidenceStore:
             self._migrate_add_tenant_id_column()
             self._migrate_add_violation_id_column()
             self._migrate_add_summary_columns()
+            self._migrate_add_chain_columns()
             self._migrate_add_case_tables()
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_verdict_id ON evidence(verdict_id)"
@@ -321,6 +324,65 @@ class EvidenceStore:
                 self._conn.commit()
         self._conn.commit()
 
+    def _migrate_add_chain_columns(self) -> None:
+        """
+        Foundation for hash_version 1 (see evidence_store/canonical.py). Adds, to a database that predates it:
+          seq              position in the organization's chain (1, 2, 3, ...), filled for existing rows
+          record_type      VERDICT, or an event (STATUS_CHANGE, COMMENT) chained in the same sequence
+          hash_version     0 for every existing row (never rehashed), 1 for rows written from now on
+          status_baseline  a verdict's status when it was written (existing rows: their current status)
+          target_id        the verdict an event is about
+        Takes a private copy of the database first when there is anything to migrate. Idempotent.
+        """
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)
+        """)
+        existing = {row["name"] for row in self._conn.execute("PRAGMA table_info(evidence)")}
+        if "seq" not in existing:
+            n = self._conn.execute("SELECT COUNT(*) AS n FROM evidence").fetchone()["n"]
+            if n:
+                self._backup_before_migration()
+            logger.info("Migrating evidence store: chain columns (hash_version 1 foundation), %d existing row(s).", n)
+            self._conn.execute("ALTER TABLE evidence ADD COLUMN seq INTEGER")
+            self._conn.execute("ALTER TABLE evidence ADD COLUMN record_type TEXT NOT NULL DEFAULT 'VERDICT'")
+            self._conn.execute("ALTER TABLE evidence ADD COLUMN hash_version INTEGER NOT NULL DEFAULT 0")
+            self._conn.execute("ALTER TABLE evidence ADD COLUMN status_baseline TEXT NOT NULL DEFAULT 'OPEN'")
+            self._conn.execute("ALTER TABLE evidence ADD COLUMN target_id TEXT")
+            self._conn.execute("UPDATE evidence SET status_baseline = remediation_status")
+            for t in [r["tenant_id"] for r in self._conn.execute("SELECT DISTINCT tenant_id FROM evidence")]:
+                rows = self._conn.execute(
+                    "SELECT row_index FROM evidence WHERE tenant_id IS ? ORDER BY row_index ASC", (t,)).fetchall()
+                for n_, row in enumerate(rows, start=1):
+                    self._conn.execute("UPDATE evidence SET seq = ? WHERE row_index = ?", (n_, row["row_index"]))
+        self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_seq ON evidence(tenant_id, seq)")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_tenant_target ON evidence(tenant_id, target_id)")
+        if not self._conn.execute("SELECT 1 FROM schema_version WHERE version = 2").fetchone():
+            self._conn.execute(
+                "INSERT INTO schema_version (version, name, applied_at) VALUES (2, 'chain columns, hash_version 1', ?)",
+                (datetime.now(timezone.utc).isoformat(),))
+        self._conn.commit()
+
+    def _backup_before_migration(self) -> None:
+        """A private, consistent copy of the database next to it, made before a format migration."""
+        try:
+            self._conn.commit()
+            target_dir = self.db_path.parent / "backups"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            dest = target_dir / f"evidence-before-migration-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.db"
+            out = sqlite3.connect(str(dest))
+            try:
+                self._conn.backup(out)
+            finally:
+                out.close()
+            try:
+                dest.chmod(0o600)
+            except OSError:
+                pass
+            logger.info("Copy of the evidence database before migration: %s", dest)
+        except Exception as e:   # a missing copy must be loud, but must not stop the server from starting
+            logger.error("Could not make a copy of the evidence database before migration: %s", e)
+
     def _migrate_add_case_tables(self) -> None:
         """Phase 13 migration: add case_metadata and case_comments tables."""
         self._conn.executescript("""
@@ -370,6 +432,31 @@ class EvidenceStore:
         row = cursor.fetchone()
         return row["row_hash"] if row else GENESIS_HASH
 
+    def _get_last_seq(self, tenant_id: str) -> int:
+        row = self._conn.execute("SELECT MAX(seq) AS m FROM evidence WHERE tenant_id = ?", (tenant_id,)).fetchone()
+        return row["m"] or 0
+
+    @staticmethod
+    def _decode(row) -> dict:
+        """A stored record's content in the shape the rest of the product reads (version 0 field names)."""
+        payload = json.loads(decrypt_field(row["payload_json"]))
+        return cn.legacy_view(payload) if row["hash_version"] == 1 else payload
+
+    def _append_event(self, tenant_id: str, record_type: str, target: str, body_fn) -> str:
+        """Chain one event record (status change or comment). Caller holds the lock and commits."""
+        event_id = str(uuid.uuid4())
+        seq = self._get_last_seq(tenant_id) + 1
+        previous_hash = self._get_last_hash(tenant_id)
+        body = body_fn(event_id, seq)
+        row_hash = cn.v1_hash(previous_hash, body)
+        self._conn.execute("""
+            INSERT INTO evidence (verdict_id, payload_json, row_hash, previous_hash, remediation_status,
+                                  appended_at, tenant_id, seq, record_type, hash_version, target_id)
+            VALUES (?, ?, ?, ?, 'OPEN', ?, ?, ?, ?, 1, ?)
+        """, (event_id, encrypt_field(cn.canonical_json(body)), row_hash, previous_hash,
+              datetime.now(timezone.utc).isoformat(), tenant_id, seq, record_type, target))
+        return event_id
+
     def append(self, ev: ExplainedVerdict) -> int:
         """
         Append an ExplainedVerdict to the store. tenant_id is read from
@@ -383,16 +470,20 @@ class EvidenceStore:
         with self._lock:
             previous_hash = self._get_last_hash(tenant_id)
             violation_id = self._get_next_violation_id(tenant_id)
-            payload_json = _serialize_immutable(ev)
-            row_hash = _compute_hash(payload_json, previous_hash)
+            seq = self._get_last_seq(tenant_id) + 1
+            body = cn.verdict_body(ev, tenant_id, seq)
+            payload_json = cn.canonical_json(body)
+            row_hash = cn.v1_hash(previous_hash, body)           # hash_version 1 (canonical_json, see canonical.py)
             appended_at = datetime.now(timezone.utc).isoformat()
+            status = ev.verdict.remediation_status.value
 
             self._conn.execute("""
                 INSERT INTO evidence
                     (verdict_id, payload_json, row_hash, previous_hash,
                      remediation_status, remediation_updated_at, appended_at, tenant_id, violation_id,
-                     rule_id, severity, source_system, breach_candidate)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     rule_id, severity, source_system, breach_candidate,
+                     seq, record_type, hash_version, status_baseline)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'VERDICT', 1, ?)
             """, (
                 str(ev.verdict.verdict_id),
                 encrypt_field(payload_json),   # store encrypted; hash was computed on plaintext
@@ -407,6 +498,8 @@ class EvidenceStore:
                 ev.verdict.severity.value,
                 ev.verdict.source_system,
                 1 if ev.verdict.breach_notification_candidate else 0,
+                seq,
+                status,
             ))
             self._conn.commit()
 
@@ -418,87 +511,112 @@ class EvidenceStore:
 
     def verify_chain(self, tenant_id: str) -> dict:
         """
-        Recompute THIS TENANT's own chain — every row where tenant_id
-        matches, in row_index order — and compare against stored hashes.
-        Never touches or is affected by any other tenant's rows (see module
-        docstring point 2): an org can independently verify its own evidence
-        without needing access to, or trusting, another org's data.
+        Recompute THIS TENANT's own chain and compare it with what is stored. Never touches another tenant's rows
+        (an organization can verify its own evidence without trusting or needing anyone else's).
 
-        Returns:
-            {"valid": True, "first_broken_index": None}  — clean chain
-            {"valid": False, "first_broken_index": N}    — first broken row,
-                0-based WITHIN THIS TENANT'S OWN row sequence (not the
-                global row_index — a caller scoped to one tenant has no
-                business reasoning about other tenants' row positions).
-
-        This is what the auditor runs as monthly sign-off, for their own org.
+        Returns {"valid": True, "first_broken_index": None} for a sound chain, or
+        {"valid": False, "first_broken_index": N}: N is 0-based within this tenant's own record sequence.
+        verify_chain_detail() also says what was wrong.
         """
-        cursor = self._conn.execute(
-            "SELECT row_index, payload_json, row_hash, previous_hash, "
-            "rule_id, severity, source_system, breach_candidate "
-            "FROM evidence WHERE tenant_id = ? ORDER BY row_index ASC",
+        detail = self.verify_chain_detail(tenant_id)
+        return {"valid": detail["valid"], "first_broken_index": detail["first_broken_index"]}
+
+    def verify_chain_detail(self, tenant_id: str) -> dict:
+        """
+        Checks, in order, for every record of the tenant:
+          * the record hash (version 0: sha256(payload + previous); version 1: canonical body, see canonical.py);
+          * the link to the previous record, and that `seq` counts 1, 2, 3 ... without a gap;
+          * for a verdict, that the plain summary columns agree with the signed record;
+          * for an event, that it is about a verdict of this tenant and the status change is a valid step.
+        At the end, each verdict's cached status must equal its baseline plus its status-change events.
+        Returns {"valid", "first_broken_index", "reason", "records", "head_hash"}.
+        """
+        rows = self._conn.execute(
+            "SELECT row_index, payload_json, row_hash, previous_hash, rule_id, severity, source_system, "
+            "breach_candidate, seq, record_type, hash_version, status_baseline, verdict_id, target_id, "
+            "remediation_status FROM evidence WHERE tenant_id = ? ORDER BY row_index ASC",
             (tenant_id,),
-        )
-        rows = cursor.fetchall()
+        ).fetchall()
+
+        def bad(i: int, reason: str, global_index: int) -> dict:
+            logger.warning("Chain broken for tenant_id=%r at tenant-local index %d (global row_index=%d): %s",
+                           tenant_id, i, global_index, reason)
+            return {"valid": False, "first_broken_index": i, "reason": reason, "records": len(rows), "head_hash": None}
 
         expected_previous = GENESIS_HASH
+        status = {}           # verdict_id -> replayed status
+        cached = {}           # verdict_id -> (cached status, index)
         for i, row in enumerate(rows):
-            # Decrypt before hashing — row_hash was computed on plaintext
             plaintext_json = decrypt_field(row["payload_json"])
-            expected_hash = _compute_hash(plaintext_json, expected_previous)
-            if expected_hash != row["row_hash"]:
-                logger.warning(
-                    "Chain broken for tenant_id=%r at tenant-local index %d (global row_index=%d)",
-                    tenant_id, i, row["row_index"],
-                )
-                return {"valid": False, "first_broken_index": i}
-            if row["previous_hash"] != expected_previous:
-                logger.warning(
-                    "previous_hash mismatch for tenant_id=%r at tenant-local index %d",
-                    tenant_id, i,
-                )
-                return {"valid": False, "first_broken_index": i}
-            # the plain summary columns (used for the overview counts) must say what the signed record says
             signed = json.loads(plaintext_json)
-            if (row["rule_id"], row["severity"], row["source_system"], row["breach_candidate"]) != (
-                    signed.get("rule_id"), signed.get("severity"), signed.get("source_system"),
-                    1 if signed.get("breach_notification_candidate") else 0):
-                logger.warning(
-                    "summary columns differ from the signed record for tenant_id=%r at tenant-local index %d",
-                    tenant_id, i,
-                )
-                return {"valid": False, "first_broken_index": i}
+            if row["hash_version"] == 0:
+                expected_hash = cn.v0_hash(plaintext_json, expected_previous)
+            else:
+                try:
+                    expected_hash = cn.v1_hash(expected_previous, signed)
+                except TypeError:
+                    return bad(i, "HASH_MISMATCH", row["row_index"])
+            if expected_hash != row["row_hash"]:
+                return bad(i, "HASH_MISMATCH", row["row_index"])
+            if row["previous_hash"] != expected_previous:
+                return bad(i, "CHAIN_BREAK", row["row_index"])
+            if row["seq"] != i + 1 or (row["hash_version"] == 1 and (signed.get("seq") != i + 1
+                                                                      or signed.get("org") != tenant_id)):
+                return bad(i, "CHAIN_BREAK", row["row_index"])
+
+            rtype = row["record_type"]
+            if rtype == cn.VERDICT:
+                if row["hash_version"] == 1:
+                    sc = (signed.get("rule_id"), signed.get("severity"), signed.get("source_system"),
+                          1 if signed.get("breach_notification_candidate") else 0)
+                else:
+                    sc = (signed.get("rule_id"), signed.get("severity"), signed.get("source_system"),
+                          1 if signed.get("breach_notification_candidate") else 0)
+                if (row["rule_id"], row["severity"], row["source_system"], row["breach_candidate"]) != sc:
+                    return bad(i, "SUMMARY_MISMATCH", row["row_index"])
+                status[row["verdict_id"]] = row["status_baseline"]
+                cached[row["verdict_id"]] = (row["remediation_status"], i)
+            elif rtype == cn.STATUS_CHANGE:
+                target = signed.get("target")
+                if target not in status or signed.get("old_status") != status[target]:
+                    return bad(i, "EVENT_INVALID", row["row_index"])
+                if signed.get("new_status") not in _VALID_TRANSITIONS.get(status[target], []):
+                    return bad(i, "EVENT_INVALID", row["row_index"])
+                status[target] = signed["new_status"]
+            elif rtype == cn.COMMENT:
+                if signed.get("target") not in status:
+                    return bad(i, "EVENT_INVALID", row["row_index"])
+            else:
+                return bad(i, "EVENT_INVALID", row["row_index"])
             expected_previous = row["row_hash"]
 
-        return {"valid": True, "first_broken_index": None}
+        for vid, (cache_value, idx) in cached.items():
+            if status.get(vid) != cache_value:
+                return bad(idx, "STATUS_CACHE_MISMATCH", rows[idx]["row_index"])
+        return {"valid": True, "first_broken_index": None, "reason": None, "records": len(rows),
+                "head_hash": expected_previous if rows else None}
 
-    def update_status(self, tenant_id: str, verdict_id: str, new_status: str) -> None:
+    def update_status(self, tenant_id: str, verdict_id: str, new_status: str,
+                      actor: str = "system", reason: Optional[str] = None) -> None:
         """
-        Update remediation_status for a verdict — but ONLY if it belongs to
-        tenant_id. A verdict_id belonging to a different tenant is treated
-        identically to a nonexistent one (ValueError "Verdict not found") —
-        deliberately not distinguished, so a caller cannot probe whether a
-        given verdict_id exists under someone else's tenant.
+        Change a verdict's remediation status. The change is first chained as a STATUS_CHANGE event (who, when,
+        from what to what, why), then the cached `remediation_status` column is updated, in one transaction. A
+        status can therefore never change silently: verify_chain() replays the events and compares the result
+        with the cache.
 
-        Only valid transitions: OPEN → ACKNOWLEDGED → RESOLVED
+        A verdict_id of another tenant is treated exactly like one that does not exist.
+        Only valid transitions: OPEN → ACKNOWLEDGED → RESOLVED.
 
-        Raises:
-            ValueError if verdict not found (or not owned by tenant_id).
-            ValueError if the transition is not allowed.
-
-        IMMUTABILITY PRESERVED: this only touches `remediation_status` and
-        `remediation_updated_at` columns — never `payload_json` or `row_hash`.
+        Raises ValueError for an unknown verdict or a transition that is not allowed.
         """
         new_status = new_status.upper()
         if new_status not in ("OPEN", "ACKNOWLEDGED", "RESOLVED"):
             raise ValueError(f"Invalid status: {new_status!r}")
 
         with self._lock:
-            cursor = self._conn.execute(
-                "SELECT remediation_status FROM evidence WHERE verdict_id = ? AND tenant_id = ?",
-                (verdict_id, tenant_id)
-            )
-            row = cursor.fetchone()
+            row = self._conn.execute(
+                "SELECT remediation_status FROM evidence WHERE verdict_id = ? AND tenant_id = ? "
+                "AND record_type = 'VERDICT'", (verdict_id, tenant_id)).fetchone()
             if row is None:
                 raise ValueError(f"Verdict not found: {verdict_id!r}")
 
@@ -510,16 +628,22 @@ class EvidenceStore:
                     f"Allowed: {allowed}"
                 )
 
-            updated_at = datetime.now(timezone.utc).isoformat()
-            self._conn.execute(
-                "UPDATE evidence SET remediation_status = ?, remediation_updated_at = ? "
-                "WHERE verdict_id = ? AND tenant_id = ?",
-                (new_status, updated_at, verdict_id, tenant_id)
-            )
-            self._conn.commit()
-            logger.info(
-                "Updated verdict %s (tenant_id=%r) status: %s → %s", verdict_id, tenant_id, current, new_status
-            )
+            at = datetime.now(timezone.utc)
+            try:
+                self._append_event(
+                    tenant_id, cn.STATUS_CHANGE, verdict_id,
+                    lambda event_id, seq: cn.status_change_body(
+                        tenant_id, seq, event_id, verdict_id, current, new_status, actor or "system", reason, at))
+                self._conn.execute(
+                    "UPDATE evidence SET remediation_status = ?, remediation_updated_at = ? "
+                    "WHERE verdict_id = ? AND tenant_id = ? AND record_type = 'VERDICT'",
+                    (new_status, at.isoformat(), verdict_id, tenant_id))
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+            logger.info("Updated verdict %s (tenant_id=%r) status: %s → %s by %s",
+                        verdict_id, tenant_id, current, new_status, actor)
 
     def query(
         self,
@@ -541,7 +665,7 @@ class EvidenceStore:
 
         Returns a list of dicts with all stored fields + parsed payload_json fields.
         """
-        where_clauses = ["tenant_id = ?"]
+        where_clauses = ["tenant_id = ?", "record_type = 'VERDICT'"]
         params: list = [tenant_id]
 
         if remediation_status:
@@ -556,7 +680,7 @@ class EvidenceStore:
 
         results = []
         for row in rows:
-            payload = json.loads(decrypt_field(row["payload_json"]))
+            payload = self._decode(row)
 
             # Apply payload-level filters (can't use SQL efficiently on JSON blob)
             if source_system and payload.get("source_system") != source_system:
@@ -588,12 +712,12 @@ class EvidenceStore:
         belongs to a different tenant — same non-distinguishing behavior as
         update_status, for the same reason."""
         cursor = self._conn.execute(
-            "SELECT * FROM evidence WHERE verdict_id = ? AND tenant_id = ?", (verdict_id, tenant_id)
+            "SELECT * FROM evidence WHERE verdict_id = ? AND tenant_id = ? AND record_type = 'VERDICT'", (verdict_id, tenant_id)
         )
         row = cursor.fetchone()
         if row is None:
             return None
-        payload = json.loads(decrypt_field(row["payload_json"]))
+        payload = self._decode(row)
         return {
             "violation_id": row["violation_id"],
             "row_index": row["row_index"] - 1,
@@ -615,12 +739,12 @@ class EvidenceStore:
         llm_explainer/explainer.py), so no new LLM call happens here.
         """
         cursor = self._conn.execute(
-            "SELECT * FROM evidence WHERE tenant_id = ? AND violation_id = ?", (tenant_id, violation_id)
+            "SELECT * FROM evidence WHERE tenant_id = ? AND violation_id = ? AND record_type = 'VERDICT'", (tenant_id, violation_id)
         )
         row = cursor.fetchone()
         if row is None:
             return None
-        payload = json.loads(decrypt_field(row["payload_json"]))
+        payload = self._decode(row)
         return {
             "violation_id": row["violation_id"],
             "row_index": row["row_index"] - 1,
@@ -633,7 +757,7 @@ class EvidenceStore:
 
     def count(self, tenant_id: str) -> int:
         """Return total number of rows in the store for tenant_id."""
-        cursor = self._conn.execute("SELECT COUNT(*) as n FROM evidence WHERE tenant_id = ?", (tenant_id,))
+        cursor = self._conn.execute("SELECT COUNT(*) as n FROM evidence WHERE tenant_id = ? AND record_type = 'VERDICT'", (tenant_id,))
         return cursor.fetchone()["n"]
 
     def stats(self, tenant_id: str) -> dict:
@@ -643,13 +767,13 @@ class EvidenceStore:
         """
         def grouped(column: str) -> dict:
             rows = self._conn.execute(
-                f"SELECT {column} AS k, COUNT(*) AS n FROM evidence WHERE tenant_id = ? GROUP BY {column}",
+                f"SELECT {column} AS k, COUNT(*) AS n FROM evidence WHERE tenant_id = ? AND record_type = 'VERDICT' GROUP BY {column}",
                 (tenant_id,)).fetchall()
             return {(r["k"] if r["k"] is not None else "unknown"): r["n"] for r in rows}
 
         by_status = grouped("remediation_status")
         breaches = self._conn.execute(
-            "SELECT COUNT(*) AS n FROM evidence WHERE tenant_id = ? AND breach_candidate = 1", (tenant_id,)
+            "SELECT COUNT(*) AS n FROM evidence WHERE tenant_id = ? AND record_type = 'VERDICT' AND breach_candidate = 1", (tenant_id,)
         ).fetchone()["n"]
         return {"total": sum(by_status.values()), "by_rule": grouped("rule_id"),
                 "by_severity": grouped("severity"), "by_source_system": grouped("source_system"),
@@ -658,7 +782,7 @@ class EvidenceStore:
     def count_by_status(self, tenant_id: str) -> dict:
         """{remediation_status: number of findings} for tenant_id (cheap: no payload is read)."""
         rows = self._conn.execute(
-            "SELECT remediation_status AS s, COUNT(*) AS n FROM evidence WHERE tenant_id = ? GROUP BY remediation_status",
+            "SELECT remediation_status AS s, COUNT(*) AS n FROM evidence WHERE tenant_id = ? AND record_type = 'VERDICT' GROUP BY remediation_status",
             (tenant_id,)).fetchall()
         return {r["s"]: r["n"] for r in rows}
 
@@ -707,10 +831,21 @@ class EvidenceStore:
         cid = str(_u4())
         now = _dt.datetime.now(_dt.timezone.utc).isoformat()
         with self._lock:
-            self._conn.execute(
-                "INSERT INTO case_comments (comment_id,verdict_id,tenant_id,author_id,author_name,content,created_at) VALUES (?,?,?,?,?,?,?)",
-                (cid, verdict_id, tenant_id, author_id, author_name, content, now))
-            self._conn.commit()
+            try:
+                self._conn.execute(
+                    "INSERT INTO case_comments (comment_id,verdict_id,tenant_id,author_id,author_name,content,created_at) VALUES (?,?,?,?,?,?,?)",
+                    (cid, verdict_id, tenant_id, author_id, author_name, content, now))
+                if self._conn.execute("SELECT 1 FROM evidence WHERE verdict_id = ? AND tenant_id = ? AND record_type = 'VERDICT'",
+                                      (verdict_id, tenant_id)).fetchone():
+                    at = _dt.datetime.now(_dt.timezone.utc)
+                    self._append_event(
+                        tenant_id, cn.COMMENT, verdict_id,
+                        lambda event_id, seq: cn.comment_body(tenant_id, seq, event_id, verdict_id,
+                                                              author_name or author_id or "unknown", content, at))
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
         return {"comment_id": cid, "verdict_id": verdict_id, "author_id": author_id,
                 "author_name": author_name, "content": content, "created_at": now}
 

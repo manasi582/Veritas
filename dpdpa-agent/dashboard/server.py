@@ -343,7 +343,7 @@ async def update_verdict_status(
 ):
     store = get_store()
     try:
-        store.update_status(org_id, verdict_id, body.status)
+        store.update_status(org_id, verdict_id, body.status, actor=_user.username)
         row = store.get_by_verdict_id(org_id, verdict_id)
         try:
             from audit_log.store import AuditAction, get_audit_store
