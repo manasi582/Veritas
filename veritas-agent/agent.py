@@ -251,8 +251,8 @@ def validate_sources(sources: Any) -> List[str]:
             problems.append(f"{where} must be a mapping")
             continue
         kind = str(src.get("type", "")).lower()
-        if kind not in ("file", "docker", "kubernetes_logs", "db_schema_log"):
-            problems.append(f"{where}: unknown type {src.get('type')!r} (use file, docker, kubernetes_logs or db_schema_log)")
+        if kind not in ("file", "docker", "kubernetes_logs", "db_schema_log", "syslog"):
+            problems.append(f"{where}: unknown type {src.get('type')!r} (use file, docker, kubernetes_logs, db_schema_log or syslog)")
             continue
         fmt = src.get("format")
         if fmt is not None and str(fmt).lower() not in LOG_FORMATS:
@@ -262,8 +262,14 @@ def validate_sources(sources: Any) -> List[str]:
             problems.append(f"{where}: max_files must be a positive integer")
         if kind in ("file", "db_schema_log") and not src.get("path"):
             problems.append(f"{where}: {kind} source needs a path")
-        if kind in ("file", "db_schema_log") and not src.get("source_system"):
+        if kind in ("file", "db_schema_log", "syslog") and not src.get("source_system"):
             problems.append(f"{where}: {kind} source needs a source_system")
+        if kind == "syslog":
+            port = src.get("port")
+            if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
+                problems.append(f"{where}: syslog needs a port from 1 to 65535")
+            if str(src.get("protocol", "udp")).lower() not in ("udp", "tcp"):
+                problems.append(f"{where}: syslog protocol must be udp or tcp")
         if kind == "docker" and not src.get("container"):
             problems.append(f"{where}: docker source needs a container")
         if kind == "kubernetes_logs":
@@ -1185,6 +1191,95 @@ class FileFollower:
         return lines
 
 
+def serve_syslog(host: str, port: int, protocol: str, source_system: str, event_queue: queue.Queue,
+                 stop_event: Optional[threading.Event] = None, max_message: int = 8192, ready: Optional[threading.Event] = None) -> None:
+    """
+    Receives syslog messages (RFC 3164 or 5424) on a UDP or TCP port and queues each as a log line, as a file source would.
+    TCP accepts newline-separated messages and RFC 6587 octet-counted frames. A message longer than `max_message` is cut.
+    Bind it to loopback unless other machines must send to it: the agent does not authenticate senders.
+    """
+    import socket
+    stop = stop_event or threading.Event()
+    target = f"{protocol}://{host}:{port}"
+
+    def take(raw: bytes) -> None:
+        text = raw[:max_message].decode("utf-8", errors="replace").strip("\r\n\x00 ")
+        if text:
+            _enqueue(event_queue, text, source_system)
+
+    if protocol == "udp":
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port))
+        sock.settimeout(0.5)
+        SOURCES.update("syslog", target, source_system=source_system, state="reading", detail="")
+        logger.info("Receiving syslog on %s (source_system: %s)", target, source_system)
+        if ready:
+            ready.set()
+        while not stop.is_set():
+            try:
+                data, _addr = sock.recvfrom(65535)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            for line in data.split(b"\n"):
+                take(line)
+        sock.close()
+        return
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind((host, port))
+    server.listen(16)
+    server.settimeout(0.5)
+    SOURCES.update("syslog", target, source_system=source_system, state="reading", detail="")
+    logger.info("Receiving syslog on %s (source_system: %s)", target, source_system)
+    if ready:
+        ready.set()
+
+    def connection(conn) -> None:
+        conn.settimeout(1.0)
+        buf = b""
+        with conn:
+            while not stop.is_set():
+                try:
+                    chunk = conn.recv(65536)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                buf += chunk
+                while buf:
+                    m = re.match(rb"^(\d{1,6}) ", buf)
+                    if m:                                       # RFC 6587 octet counting: "<length> <message>"
+                        n = int(m.group(1))
+                        if len(buf) < m.end() + n:
+                            break
+                        take(buf[m.end():m.end() + n])
+                        buf = buf[m.end() + n:]
+                    elif b"\n" in buf:
+                        line, _, buf = buf.partition(b"\n")
+                        take(line)
+                    else:
+                        if len(buf) > 4 * max_message:
+                            take(buf)
+                            buf = b""
+                        break
+
+    while not stop.is_set():
+        try:
+            conn, _addr = server.accept()
+        except socket.timeout:
+            continue
+        except OSError:
+            break
+        threading.Thread(target=connection, args=(conn,), daemon=True, name="syslog-conn").start()
+    server.close()
+
+
 class DdlJoiner:
     """
     For a database log (PostgreSQL with log_statement=ddl or pgaudit, MySQL's audit or general log, or a migration
@@ -1765,6 +1860,16 @@ def main() -> None:
                 args=(source["path"], src_system, event_queue),
                 daemon=True,
                 name=f"tail-file-{src_system}",
+            )
+            t.start()
+
+        elif src_type == "syslog":
+            t = threading.Thread(
+                target=serve_syslog,
+                args=(str(source.get("host", "127.0.0.1")), int(source["port"]), str(source.get("protocol", "udp")).lower(),
+                      src_system, event_queue),
+                daemon=True,
+                name=f"syslog-{source['port']}",
             )
             t.start()
 

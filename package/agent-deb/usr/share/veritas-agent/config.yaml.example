@@ -50,3 +50,10 @@ sources:
 #   - type: db_schema_log
 #     path: /var/log/postgresql/postgresql-16-main.log
 #     source_system: loan-db
+
+# Syslog from devices and software that cannot write files (UDP or TCP). No authentication: keep it on loopback or a
+# trusted segment. See docs/STREAMING_RECEIVERS.md.
+#   - type: syslog
+#     source_system: edge-gateway
+#     port: 5140
+#     protocol: udp

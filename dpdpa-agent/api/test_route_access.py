@@ -59,6 +59,7 @@ PUBLIC = {
 AGENT_TOKEN_ROUTES = {
     ("POST", "/agent/heartbeat"),
     ("POST", "/v1/{org_id}/events"),
+    ("POST", "/v1/{org_id}/otlp/logs"),
     ("GET", "/metrics"),            # a bearer token chosen by the administrator (VERITAS_METRICS_TOKEN)
 }
 

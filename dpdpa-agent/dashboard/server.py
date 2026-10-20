@@ -208,6 +208,8 @@ from api.retention import router as retention_router  # noqa: E402
 app.include_router(retention_router)
 from api.notices import router as notices_router  # noqa: E402
 app.include_router(notices_router)
+from api.otlp import router as otlp_router  # noqa: E402
+app.include_router(otlp_router)
 
 
 # ---------------------------------------------------------------------------

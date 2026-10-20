@@ -203,13 +203,13 @@ class E2E:
         key = self.post(admin, "/agents/issue-key", json={"org_id": org}).json()["key"]
         return key
 
-    def start_agent(self, name, org, system, address, redaction=None, source_type="file"):
+    def start_agent(self, name, org, system, address, redaction=None, source_type="file", source=None):
         admin = self.admins
         key = self.new_agent_token(admin, org)
         log = self.work / "logs" / f"{name}.log"
         log.write_text("")
         cfg = {"veritas_address": address, "registration_key": key, "source_label": name,
-               "state_dir": str(self.work / f"state-{name}"), "sources": [{"type": source_type, "path": str(log), "source_system": system}]}
+               "state_dir": str(self.work / f"state-{name}"), "sources": [source or {"type": source_type, "path": str(log), "source_system": system}]}
         if redaction:
             cfg["redaction"] = redaction
         (self.work / f"{name}.yaml").write_text(json.dumps(cfg))        # JSON is YAML
@@ -439,6 +439,28 @@ class E2E:
         cov = self.get(self.admins, f"/v1/{ORG}/notices").json()
         check(next(o for o in cov["observed"] if o["system"] == "noisy-service" and o["category"] == "aadhaar")["covered"], "the new notice did not close the gap")
         check(not any(raw in json.dumps(cov) for raw in RAW), "the notice review holds a raw value")
+
+        step("streaming receivers (R2): an OpenTelemetry log export and a syslog message are judged like any log line")
+        otlp = {"resourceLogs": [{"resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "checkout-otel"}}]},
+                                  "scopeLogs": [{"logRecords": [{"timeUnixNano": str(int(time.time() * 1e9)), "severityText": "INFO",
+                                                                "body": {"stringValue": f"callback to {PHONE} failed"}}]}]}]}
+        r = requests.post(f"{self.base}/v1/{ORG}/otlp/logs", json=otlp, headers={"Authorization": f"Bearer {tok}"}, timeout=60)
+        check(r.status_code == 200 and r.json() == {}, f"the OTLP export was refused: {r.status_code} {r.text[:200]}")
+        r = requests.post(f"{self.base}/v1/{ORG}/otlp/logs", data=b"\x0a\x00", headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/x-protobuf"}, timeout=60)
+        check(r.status_code == 415, "OTLP over protobuf should be refused with a clear message")
+        syslog_port = free_port()
+        self.start_agent("agent-syslog", ORG, "edge-gateway", self.base, source={"type": "syslog", "source_system": "edge-gateway", "port": syslog_port, "protocol": "udp"})
+        wait_for(lambda: any(a["source_label"] == "agent-syslog" and a.get("last_heartbeat_at") for a in self.get(self.admins, f"/agents?org_id={ORG}").json()["agents"]),
+                 "the syslog agent to report")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        for _ in range(3):
+            sock.sendto(f"<14>1 2026-10-20T10:00:00Z gw app - - - login failed for {PHONE}".encode(), ("127.0.0.1", syslog_port))
+            time.sleep(0.5)
+        for system in ("checkout-otel", "edge-gateway"):
+            wait_for(lambda s=system: [v for v in self.get(self.admins, f"/api/{ORG}/verdicts").json()["verdicts"] if v["source_system"] == s],
+                     f"the finding from {system}")
+        kinds = {c["kinds"][0] for n in self.get(self.admins, f"/v1/{ORG}/flows").json()["nodes"] if n["id"] == "checkout-otel" for c in n["observed"]}
+        check(kinds == {"otlp"}, f"the data map does not show the OTLP source: {kinds}")
 
         step("resolution and recurrence (F3): resolve, wait out the grace period, see it come back")
         target = max((i for i in noisy if i["rule_id"] == "EXPOSURE_001"), key=lambda i: i["count"])

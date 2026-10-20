@@ -52,6 +52,7 @@ Step-by-step guides:
 | [docs/AGENT_REDACTION.md](docs/AGENT_REDACTION.md), [docs/RECOGNIZERS.md](docs/RECOGNIZERS.md) | Masking, hashing or dropping personal data in the agent, and the shared rules behind it |
 | [docs/SUBJECT_LOOKUP.md](docs/SUBJECT_LOOKUP.md) | Where was an identifier observed, rights requests, the erasure watch and the signed record |
 | [docs/SCHEMA_WATCH.md](docs/SCHEMA_WATCH.md), [docs/PAYLOAD_TAP.md](docs/PAYLOAD_TAP.md) | Telemetry beyond logs: database schema changes, and personal data in API payloads (libraries for Python and Node, and a pipeline gate) |
+| [docs/STREAMING_RECEIVERS.md](docs/STREAMING_RECEIVERS.md) | OpenTelemetry logs and syslog as ways in, besides files |
 | [docs/NOTICE_REGISTRY.md](docs/NOTICE_REGISTRY.md) | Which privacy notices cover the data declared and observed (coverage, not adequacy), with `NOTICE_001` |
 | [docs/RETENTION_REVIEW.md](docs/RETENTION_REVIEW.md) | Declared retention periods against what is still seen, with warnings and owner tasks (never deletes anything) |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Measured cost of these features |
