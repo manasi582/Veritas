@@ -117,6 +117,7 @@ from db_encryption import decrypt_field, encrypt_field
 from evidence_store import canonical as cn
 from evidence_store import flows as flows_mod
 from evidence_store import incidents as inc
+from schema_watch import evaluate as schema_eval
 from subject_lookup import index as subject_index, keys as subject_keys, rights as subject_rights
 from llm_explainer.explainer import ExplainedVerdict
 from schemas.models import RemediationStatus
@@ -251,6 +252,7 @@ class EvidenceStore:
             self._migrate_add_case_tables()
             inc.create_tables(self._conn)
             flows_mod.create_tables(self._conn)
+            schema_eval.create_tables(self._conn)
             subject_keys.create_tables(self._conn)
             subject_index.create_tables(self._conn)
             subject_rights.create_tables(self._conn)

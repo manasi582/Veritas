@@ -42,3 +42,10 @@ sources:
 #   fail_closed: true           # if a line cannot be redacted, drop it instead of sending it raw
 #   tee_file: /var/log/veritas-agent/masked.log   # optional masked copy for a log shipper
 #   hash_key: ${VERITAS_HASH_KEY}                 # needed for mode: hash
+
+# Database schema changes (a new column that looks like personal data): point at a database log that records
+# CREATE/ALTER/DROP TABLE statements (PostgreSQL: log_statement = 'ddl'). Only those statements leave this machine.
+# See docs/SCHEMA_WATCH.md.
+#   - type: db_schema_log
+#     path: /var/log/postgresql/postgresql-16-main.log
+#     source_system: loan-db

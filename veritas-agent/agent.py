@@ -251,8 +251,8 @@ def validate_sources(sources: Any) -> List[str]:
             problems.append(f"{where} must be a mapping")
             continue
         kind = str(src.get("type", "")).lower()
-        if kind not in ("file", "docker", "kubernetes_logs"):
-            problems.append(f"{where}: unknown type {src.get('type')!r} (use file, docker or kubernetes_logs)")
+        if kind not in ("file", "docker", "kubernetes_logs", "db_schema_log"):
+            problems.append(f"{where}: unknown type {src.get('type')!r} (use file, docker, kubernetes_logs or db_schema_log)")
             continue
         fmt = src.get("format")
         if fmt is not None and str(fmt).lower() not in LOG_FORMATS:
@@ -260,10 +260,10 @@ def validate_sources(sources: Any) -> List[str]:
         max_files = src.get("max_files")
         if max_files is not None and (not isinstance(max_files, int) or isinstance(max_files, bool) or max_files < 1):
             problems.append(f"{where}: max_files must be a positive integer")
-        if kind == "file" and not src.get("path"):
-            problems.append(f"{where}: file source needs a path")
-        if kind == "file" and not src.get("source_system"):
-            problems.append(f"{where}: file source needs a source_system")
+        if kind in ("file", "db_schema_log") and not src.get("path"):
+            problems.append(f"{where}: {kind} source needs a path")
+        if kind in ("file", "db_schema_log") and not src.get("source_system"):
+            problems.append(f"{where}: {kind} source needs a source_system")
         if kind == "docker" and not src.get("container"):
             problems.append(f"{where}: docker source needs a container")
         if kind == "kubernetes_logs":
@@ -1185,19 +1185,61 @@ class FileFollower:
         return lines
 
 
+class DdlJoiner:
+    """
+    For a database log (PostgreSQL with log_statement=ddl or pgaudit, MySQL's audit or general log, or a migration
+    file): keeps only schema statements (CREATE, ALTER or DROP TABLE) and joins a statement that is spread over several
+    lines. Every other line, which may carry values (INSERT, UPDATE, SELECT), is dropped on the host and never sent.
+    """
+    START = re.compile(r"\b(?:CREATE|ALTER|DROP)\s+(?:(?:GLOBAL\s+|LOCAL\s+)?(?:TEMP|TEMPORARY)\s+|UNLOGGED\s+)?TABLE\b", re.I)
+    NEW_RECORD = re.compile(r"^\s*(?:\d{4}-\d{2}-\d{2}[ T]|\d{6}\s+\d|\[\d{4}-)")
+    MAX_STATEMENT = 16 * 1024
+
+    def __init__(self) -> None:
+        self._buf: List[str] = []
+        self._size = 0
+
+    def _take(self) -> str:
+        text, self._buf, self._size = " ".join(self._buf), [], 0
+        return text
+
+    def feed(self, line: str) -> List[str]:
+        out: List[str] = []
+        starts_record = bool(self.NEW_RECORD.match(line))
+        if self._buf and (starts_record or self._size > self.MAX_STATEMENT):
+            out.append(self._take())                     # the previous statement is over
+        if self.START.search(line):
+            if self._buf:
+                out.append(self._take())
+            self._buf.append(line.strip())
+            self._size += len(line)
+        elif self._buf and not starts_record:
+            self._buf.append(line.strip())               # a continuation line of a statement in progress
+            self._size += len(line)
+        if self._buf and self._buf[-1].rstrip().endswith(";"):
+            out.append(self._take())                     # a statement that ends with a semicolon is complete
+        return out
+
+    def flush_if_complete(self) -> List[str]:
+        return [self._take()] if self._buf and self._buf[-1].rstrip().endswith(";") else []
+
+
 def tail_file(
     path: str,
     source_system: str,
     event_queue: queue.Queue,
     poll_interval: float = 0.5,
     stop_event: Optional[threading.Event] = None,
+    kind: Optional[str] = None,
+    joiner: Optional["DdlJoiner"] = None,
+    src_type: str = "file",
 ) -> None:
     file_path = Path(path)
-    logger.info("Tailing file: %s (source_system: %s)", file_path, source_system)
+    logger.info("Tailing %s: %s (source_system: %s)", src_type, file_path, source_system)
 
     follower = FileFollower(file_path)
     last_warning = 0.0
-    SOURCES.update("file", str(file_path), source_system=source_system, state="waiting",
+    SOURCES.update(src_type, str(file_path), source_system=source_system, state="waiting",
                    detail="file does not exist yet" if not file_path.exists() else "")
 
     def warn_rate_limited(message: str, *args) -> None:
@@ -1213,17 +1255,24 @@ def tail_file(
                 warn_rate_limited("Waiting for log file to appear: %s", file_path)
             new_lines = follower.poll()
             for line in new_lines:
-                _enqueue(event_queue, line, source_system)
+                if joiner is None:
+                    _enqueue(event_queue, line, source_system, kind)
+                else:
+                    for statement in joiner.feed(line):      # only whole DDL statements leave; everything else is dropped here
+                        _enqueue(event_queue, statement, source_system, kind)
+            if joiner is not None:
+                for statement in joiner.flush_if_complete():
+                    _enqueue(event_queue, statement, source_system, kind)
             if follower._fh is not None:
                 fields: Dict[str, Any] = {"state": "reading", "detail": ""}
                 if new_lines:
                     fields["last_line_at"] = _now_iso()
-                SOURCES.update("file", str(file_path), **fields)
+                SOURCES.update(src_type, str(file_path), **fields)
             else:
-                SOURCES.update("file", str(file_path), state="waiting", detail="file does not exist yet")
+                SOURCES.update(src_type, str(file_path), state="waiting", detail="file does not exist yet")
         except PermissionError as e:
             follower.close()
-            SOURCES.update("file", str(file_path), state="error", detail="Permission denied")
+            SOURCES.update(src_type, str(file_path), state="error", detail="Permission denied")
             warn_rate_limited(
                 "Permission denied reading %s: %s. The agent cannot read this file; grant "
                 "the agent's user read access (on Linux the service user is "
@@ -1232,7 +1281,7 @@ def tail_file(
             time.sleep(max(poll_interval, 5))
         except OSError as e:
             follower.close()
-            SOURCES.update("file", str(file_path), state="error", detail=str(e)[:200])
+            SOURCES.update(src_type, str(file_path), state="error", detail=str(e)[:200])
             warn_rate_limited("Error reading %s: %s. Retrying.", file_path, e)
             time.sleep(max(poll_interval, 5))
         time.sleep(poll_interval)
@@ -1567,14 +1616,17 @@ def redaction_meta(counts: Dict[str, int]) -> Dict[str, Any]:
             "recognizer_pack_version": vr.PACK_VERSION if vr else "", "agent_detections": dict(counts)}
 
 
-def _enqueue(event_queue: queue.Queue, line: str, source_system: str) -> None:
+def _enqueue(event_queue: queue.Queue, line: str, source_system: str, kind: Optional[str] = None) -> None:
     STATS.incr("lines_read")
-    item: tuple = (line, source_system)
+    item: tuple = (line, source_system) if not kind else (line, source_system, {"source_kind": kind})
     if REDACTOR.active or len(line) > REDACTOR.max_chars:
         line, counts = apply_redaction(line)       # before the line is queued or copied anywhere
         if line is None:
             return                                 # dropped: not sent, counted
-        item = (line, source_system, redaction_meta(counts) if REDACTOR.active else None)
+        meta = redaction_meta(counts) if REDACTOR.active else None
+        if kind:
+            meta = {**(meta or {}), "source_kind": kind}
+        item = (line, source_system, meta)
     try:
         event_queue.put_nowait(item)
     except queue.Full:
@@ -1713,6 +1765,16 @@ def main() -> None:
                 args=(source["path"], src_system, event_queue),
                 daemon=True,
                 name=f"tail-file-{src_system}",
+            )
+            t.start()
+
+        elif src_type == "db_schema_log":
+            t = threading.Thread(
+                target=tail_file,
+                args=(source["path"], src_system, event_queue),
+                kwargs={"kind": "schema", "joiner": DdlJoiner(), "src_type": "db_schema_log"},
+                daemon=True,
+                name=f"tail-schema-{src_system}",
             )
             t.start()
 

@@ -78,6 +78,7 @@ from incidents.template import template_of
 from detection.agent_reported import LABEL_TO_ENTITY, matches_from_agent
 from flows.destination import destination_of
 from labels import check_label
+from schema_watch.evaluate import evaluate as schema_evaluate
 from llm_explainer.explainer import ExplainedVerdict, build_deferred_explanation
 from masking import _label_for_entity_type, mask_fields, mask_text
 from org_config.store import (
@@ -151,19 +152,27 @@ async def _process_event(event: Event, *, write_to_store: bool,
     module. See llm_explainer/explainer.py's "AUTOMATIC EXPLANATION
     REMOVED" docstring note for the full rationale.
     """
-    try:
-        detected: DetectedEvent = await get_pool().detect(event, identifier_validators(event.tenant_id))
-    except PoolBusy:
-        raise HTTPException(
-            status_code=503, headers={"Retry-After": str(RETRY_AFTER_SECONDS)},
-            detail="Veritas is busy detecting earlier events. Retry shortly; nothing was lost.",
-        )
+    if source_kind == "schema":     # a database statement holds structure, not values: no language model needed
+        detected = DetectedEvent(event=event, contains_pii=False, matched_entities=[])
+    else:
+        try:
+            detected = await get_pool().detect(event, identifier_validators(event.tenant_id))
+        except PoolBusy:
+            raise HTTPException(
+                status_code=503, headers={"Retry-After": str(RETRY_AFTER_SECONDS)},
+                detail="Veritas is busy detecting earlier events. Retry shortly; nothing was lost.",
+            )
     if agent_detections:   # the agent masked or hashed these before sending: the text holds placeholders (schema 2)
         reported = matches_from_agent(event.raw_snippet, agent_detections)
         if reported:
             detected = DetectedEvent(event=detected.event, contains_pii=True,
                                      matched_entities=list(detected.matched_entities) + reported)
     verdicts: List[Verdict] = evaluate_event(detected)
+    if source_kind == "schema" and write_to_store:
+        try:   # column changes against the policy (phase B): findings for undeclared personal-data columns
+            verdicts += schema_evaluate(get_store(), event.tenant_id, event, load_org_config(event.tenant_id))
+        except Exception:
+            logger.warning("schema evaluation failed for an event", exc_info=True)
     if write_to_store and detected.matched_entities:
         try:   # counts of what was observed where (never values), for the observed processing map
             get_store().flows.record(

@@ -203,13 +203,13 @@ class E2E:
         key = self.post(admin, "/agents/issue-key", json={"org_id": org}).json()["key"]
         return key
 
-    def start_agent(self, name, org, system, address, redaction=None):
+    def start_agent(self, name, org, system, address, redaction=None, source_type="file"):
         admin = self.admins
         key = self.new_agent_token(admin, org)
         log = self.work / "logs" / f"{name}.log"
         log.write_text("")
         cfg = {"veritas_address": address, "registration_key": key, "source_label": name,
-               "state_dir": str(self.work / f"state-{name}"), "sources": [{"type": "file", "path": str(log), "source_system": system}]}
+               "state_dir": str(self.work / f"state-{name}"), "sources": [{"type": source_type, "path": str(log), "source_system": system}]}
         if redaction:
             cfg["redaction"] = redaction
         (self.work / f"{name}.yaml").write_text(json.dumps(cfg))        # JSON is YAML
@@ -335,6 +335,30 @@ class E2E:
         check(self.flow_node(self.admins, "noisy-service")["status"] == "red", "a system with an open incident is not red")
         record = self.get(self.admins, f"/v1/{ORG}/flows/export").text
         check(not any(raw in record for raw in RAW) and "Record of observed processing" in record, "the processing record holds a raw value")
+
+        step("schema watch (R4): a new personal-data column in a database log, with no declaration, is a finding")
+        db_log = self.start_agent("agent-db", ORG, "loan-db", self.base, source_type="db_schema_log")
+        db_log_path = db_log
+        wait_for(lambda: any(a["source_label"] == "agent-db" and a.get("last_heartbeat_at")
+                             for a in self.get(self.admins, f"/agents?org_id={ORG}").json()["agents"]), "the database agent to report")
+        time.sleep(2)           # the agent starts reading at the end of the file
+        self.write_lines(db_log_path, [
+            "2026-10-20 12:00:00 UTC LOG:  statement: INSERT INTO customers (phone) VALUES ('" + PHONE + "')",
+            "2026-10-20 12:00:01 UTC LOG:  statement: ALTER TABLE customers ADD COLUMN aadhaar_no varchar(12);",
+            "2026-10-20 12:00:02 UTC LOG:  statement: CREATE TABLE loan_applicants (",
+            "\tid serial,", "\tdate_of_birth date,", "\tnote text", ");"])
+        found = wait_for(lambda: [v for v in self.get(self.admins, f"/api/{ORG}/verdicts").json()["verdicts"]
+                                  if v["source_system"] == "loan-db" and v["field"] == "customers.aadhaar_no"], "the schema finding")
+        check(found[0]["rule_id"] == "PURPOSE_001", f"the schema finding has the wrong rule: {found[0]['rule_id']}")
+        listing = self.get(self.admins, f"/v1/{ORG}/schema").json()
+        columns = {(c["table_name"], c["column_name"]): c["status"] for c in listing["changes"]}
+        check(columns.get(("customers", "aadhaar_no")) == "undeclared" and columns.get(("loan_applicants", "date_of_birth")) == "undeclared",
+              f"the schema changes are not listed as expected: {columns}")
+        check(not any(raw in json.dumps(listing) for raw in RAW), "the schema listing holds a raw value")
+        check(all(v["field"] != "customers.phone" for v in self.get(self.admins, f"/api/{ORG}/verdicts").json()["verdicts"]
+                  if v["source_system"] == "loan-db"), "an INSERT statement was treated as schema")
+        node = self.flow_node(self.admins, "loan-db")
+        check(node and any("schema" in c["kinds"] for c in node["observed"]), f"the data map does not show the schema source: {node}")
 
         step("resolution and recurrence (F3): resolve, wait out the grace period, see it come back")
         target = noisy[0]

@@ -133,6 +133,15 @@ def _build_fallback(verdict: Verdict, rule_id: str) -> ExplainedVerdict:
             f"tell whether the data was collected again, a copy was not erased, or the identifier now belongs to "
             f"someone else. See {section}."
         )
+    elif rule_id == "PURPOSE_001" and isinstance(verdict.matched_registry_entry, dict) \
+            and "schema_change" in verdict.matched_registry_entry:
+        entry = verdict.matched_registry_entry
+        explanation = (
+            f"A database change ({entry['schema_change']}) in {verdict.source_system} adds a column that looks like "
+            f"{entry.get('category', 'personal')} data, and the policy does not declare that kind of data for this system. "
+            f"Veritas reads database structure, not the data: check whether the column holds personal data, then declare "
+            f"its purpose in the policy, or tell Veritas it is not personal. See {section}."
+        )
     elif rule_id == "NOTICE_001":
         explanation = (
             f"Personal data of a kind that no current notice lists for {verdict.source_system} was observed there "

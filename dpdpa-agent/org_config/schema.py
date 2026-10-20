@@ -289,10 +289,28 @@ class OrgConfig(BaseModel):
         )
     )
 
+    schema_hints: Dict[str, str] = Field(
+        default_factory=dict,
+        description=("Corrections for the guess Veritas makes about database columns: a column name or pattern (for "
+                     "example 'col_7' or '*_ref') mapped to a kind of personal data, or to 'none' for a column that is "
+                     "not personal. Optional.")
+    )
     owners: Dict[str, OrgOwner] = Field(
         default_factory=dict,
         description="Owning team and channel per source_system, shown on incidents. Optional."
     )
+
+    @field_validator("schema_hints")
+    @classmethod
+    def validate_schema_hints(cls, v: Dict[str, str]) -> Dict[str, str]:
+        if len(v) > 200:
+            raise ValueError("schema_hints has more than 200 entries")
+        for pattern, kind in v.items():
+            if not re.match(r"^[A-Za-z0-9_.*?\[\]-]{1,80}$", pattern):
+                raise ValueError(f"schema_hints: {pattern!r} is not a column name or pattern")
+            if not re.match(r"^(none|[a-z_]{2,30})$", str(kind).lower()):
+                raise ValueError(f"schema_hints: {kind!r} is not a kind of data (use e.g. phone, email, aadhaar, or none)")
+        return v
 
     @field_validator("org_id", mode="before")
     @classmethod

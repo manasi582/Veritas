@@ -202,6 +202,8 @@ from api.flows import router as flows_router  # noqa: E402
 app.include_router(flows_router)
 from api.subjects import router as subjects_router  # noqa: E402
 app.include_router(subjects_router)
+from api.schema_watch import router as schema_router  # noqa: E402
+app.include_router(schema_router)
 
 
 # ---------------------------------------------------------------------------
