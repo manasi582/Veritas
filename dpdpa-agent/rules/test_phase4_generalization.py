@@ -281,14 +281,15 @@ class TestMultiTenantIsolationInterleaved:
 
 class TestRuleIdNamingConsistency:
 
-    def test_all_four_categories_follow_stable_naming_convention(self):
+    def test_all_categories_follow_stable_naming_convention(self):
         """Every RuleId member must be '<CATEGORY>_<3-digit-number>', and
-        all four categories from the plan (Exposure, Purpose, Retention,
-        Linkage) must be present exactly once."""
+        all categories (Exposure, Purpose, Retention, Linkage, and Erasure,
+        the watch for an identifier whose erasure request was closed) must be
+        present exactly once."""
         seen_categories = set()
         for rule_id in RuleId:
             prefix, _, suffix = rule_id.value.rpartition("_")
             assert prefix, f"{rule_id.value!r} does not follow '<CATEGORY>_<N>'"
             assert suffix.isdigit() and len(suffix) == 3, f"{rule_id.value!r} suffix must be a 3-digit number"
             seen_categories.add(prefix)
-        assert seen_categories == {"EXPOSURE", "PURPOSE", "RETENTION", "LINKAGE"}
+        assert seen_categories == {"EXPOSURE", "PURPOSE", "RETENTION", "LINKAGE", "ERASURE"}
