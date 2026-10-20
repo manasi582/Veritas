@@ -171,7 +171,7 @@ def flow(browser, pages: list) -> None:
     page.click("button:has-text('Refresh')") if page.locator("#main-agents button:has-text('Refresh')").count() else None
 
     # ── 6. The violation in the ledger: acknowledge, resolve, verify ────
-    step("the violation is grouped into an incident in the Audit Ledger")
+    step("the finding is grouped into an incident in the Audit Ledger")
     page.click("#nav-audit")
     inc_row = page.locator("#incTbody tr", has_text="EXPOSURE_001").first
     expect(inc_row).to_be_visible()
@@ -189,8 +189,10 @@ def flow(browser, pages: list) -> None:
     expect(first_row).to_be_visible()
     shot(page, "05-ledger")
 
-    step("acknowledge and resolve the violation")
+    step("acknowledge and resolve the finding")
     first_row.locator("button:has-text('Details')").click()
+    expect(page.locator("#whyBody")).to_contain_text("Personal data where it should not be")      # why this fired: the rule's conditions
+    expect(page.locator("#whyBody")).to_contain_text("a kind of personal data was detected")
     page.click("#drawerContent button:has-text('Acknowledge')")
     expect(page.locator("#toast")).to_contain_text("ACKNOWLEDGED")
     page.click("#drawerContent button:has-text('Mark as Resolved')")
@@ -210,6 +212,23 @@ def flow(browser, pages: list) -> None:
     with page.expect_download() as dl:
         page.click("#main-flows button:has-text('Record (CSV)')")
     assert dl.value.suggested_filename.endswith(".csv")
+    page.click("#nav-audit")
+
+    step("rules: the six rules, propose a change, approve it as the only administrator, and open the exception form")
+    page.click("#nav-rules")
+    expect(page.locator("#rulesTbody tr")).to_have_count(6)
+    expect(page.locator("#rulesNote")).to_contain_text("not a legal conclusion")
+    page.locator("#rulesTbody tr", has_text="EXPOSURE_001").locator("button:has-text('Propose change')").click()
+    page.select_option("#rfSeverity", "MEDIUM")
+    page.fill("#rfReason", "smoke test")
+    page.click("#ruleForm button:has-text('Propose')")
+    expect(page.locator("#toast")).to_contain_text("Proposed")
+    page.locator("#ruleChangesTbody tr", has_text="EXPOSURE_001").locator("button:has-text('Approve')").click()
+    expect(page.locator("#ruleChangesTbody")).to_contain_text("APPROVED")
+    expect(page.locator("#rulesTbody tr", has_text="EXPOSURE_001")).to_contain_text("severity MEDIUM")
+    page.click("#main-rules button:has-text('Propose an exception')")
+    expect(page.locator("#ruleForm")).to_contain_text("always ends")
+    shot(page, "05c-rules")
     page.click("#nav-audit")
 
     step("look an identifier up, open an erasure request, confirm the task and download the signed record")

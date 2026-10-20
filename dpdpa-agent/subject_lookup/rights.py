@@ -25,6 +25,7 @@ from evidence_store import canonical as cn
 from subject_lookup.index import CATEGORIES, InvalidIdentifier, clean_identifier
 
 TYPES = ("access", "erasure", "correction", "retention")
+EVENT_TYPES = TYPES + ("review",)      # a review task, opened by a rule whose action is require_review, is not user-created
 _REF = re.compile(r"^[ -~]{1,100}$")
 _DIGIT_RUN = re.compile(r"\d{9,}")
 
@@ -182,6 +183,24 @@ def create_retention_task(store, org: str, systems: List[str], owners: Optional[
     return get_request(store, org, request_id)
 
 
+def create_review_task(store, org: str, system: str, owners: Optional[Dict[str, dict]], detail: dict, actor: str = "system",
+                       today: Optional[datetime] = None) -> dict:
+    """A task for the owner of `system` to review one incident, opened by a rule whose action is require_review. No identifiers."""
+    now = today or datetime.now(timezone.utc)
+    request_id = str(uuid.uuid4())
+    ref = f"REV-{now.strftime('%Y%m%d')}-{request_id[:6]}"
+    lookup = [{"category": "review", "token_prefix": "-", "verdicts": [],
+               "systems": [{"system": system, "events": 0, "first_seen": now.isoformat(), "last_seen": now.isoformat()}], "review": detail}]
+    with store.writer() as conn:
+        conn.execute("""INSERT INTO rights_requests (request_id, org, type, received_at, due_at, status, requester_ref,
+                        token_ref, created_by, created_at, lookup_json) VALUES (?, ?, 'review', ?, NULL, 'OPEN', ?, NULL, ?, ?, ?)""",
+                     (request_id, org, now.isoformat(), ref, actor, now.isoformat(), json.dumps(lookup, sort_keys=True)))
+        conn.execute("INSERT INTO request_tasks (request_id, system, owner) VALUES (?, ?, ?)", (request_id, system, _owner_text(owners or {}, system)))
+        _event(store, org, request_id, "CREATED", actor, now, request_type="review", identifiers=0)
+        _event(store, org, request_id, "TASKS_CREATED", actor, now, systems=[system])
+    return {"request_id": request_id, "ref": ref}
+
+
 # --------------------------------------------------------------------------- change
 
 def _tasks(conn, request_id: str) -> List[dict]:
@@ -283,7 +302,7 @@ def verify_event(signed: dict, state: Dict[str, dict]) -> bool:
         return False
     cur = state.get(rid)
     if action == "CREATED":
-        if cur is not None or signed.get("request_type") not in TYPES:
+        if cur is not None or signed.get("request_type") not in EVENT_TYPES:
             return False
         state[rid] = {"status": "OPEN", "tasks": None}
         return True

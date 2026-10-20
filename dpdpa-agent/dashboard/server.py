@@ -198,6 +198,8 @@ from api.anchors import router as anchors_router  # noqa: E402
 app.include_router(anchors_router)
 from api.policy_packs import router as policy_packs_router  # noqa: E402
 app.include_router(policy_packs_router)
+from api.rulebook import router as rulebook_router  # noqa: E402
+app.include_router(rulebook_router)
 from api.incidents import router as incidents_router  # noqa: E402
 app.include_router(incidents_router)
 from api.flows import router as flows_router  # noqa: E402
@@ -889,6 +891,8 @@ async def startup_event():
     asyncio.create_task(broadcaster_task())
     import maintenance
     maintenance.start()      # daily backup and evidence-chain check
+    from rulebook import scheduler as rule_scheduler
+    rule_scheduler.start()   # ends expired exceptions, sends escalations (every minute)
     from anchoring.checkpoints import get_manager as _anchor_manager
     _am = _anchor_manager()
     if _am is not None:

@@ -170,7 +170,7 @@ class _Digest:
             if fields:
                 lines.append("Fields: " + ", ".join(fields) + ".")
             if numbers:
-                lines.append("Violation numbers: " + ", ".join(f"#{x}" for x in numbers) + ".")
+                lines.append("Finding numbers: " + ", ".join(f"#{x}" for x in numbers) + ".")
             self._sender(f"[Veritas] {n} new finding{'s' if n != 1 else ''} in {org}", "\n".join(lines),
                          {"kind": "findings", "org": org, "count": n, "breach_candidates": breaches})
 

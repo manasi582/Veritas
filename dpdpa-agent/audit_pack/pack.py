@@ -68,6 +68,15 @@ def gather(store, org: str, policy=None) -> Dict[str, Any]:
         from notice_registry import coverage as notice_coverage
         retention = _guard("retention", lambda: retention_review.review(store, org, policy), None)
         notices = _guard("notices", lambda: notice_coverage.review(store, org, policy), None)
+    def rules_summary():
+        from rulebook import changes
+        all_changes = changes.list_changes(store, org, limit=500)
+        in_force = changes.active(store, org)
+        return {"overlays_in_force": {k: v for k, v in in_force.overlays.items()},
+                "exceptions_in_force": len(in_force.exceptions), "changes_recorded": len(all_changes),
+                "pending": sum(1 for c in all_changes if c["status"] == changes.PROPOSED),
+                "self_approved": sum(1 for c in all_changes if c["self_approved"])}
+    rules = _guard("rules", rules_summary, None)
     return {
         "pack_version": PACK_VERSION,
         "organization": org,
@@ -79,6 +88,7 @@ def gather(store, org: str, policy=None) -> Dict[str, Any]:
         "open_incidents": open_items[:100],
         "retention": ({"counts": retention.get("summary")} if isinstance(retention, dict) else None),
         "notices": ({"counts": notices.get("summary")} if isinstance(notices, dict) else None),
+        "rules": rules,
     }
 
 
@@ -116,6 +126,15 @@ def summary_markdown(s: Dict[str, Any]) -> str:
         lines += ["", "## Retention", f"- {json.dumps(s['retention'].get('counts'), sort_keys=True)}"]
     if s.get("notices"):
         lines += ["", "## Notices", f"- {json.dumps(s['notices'].get('counts'), sort_keys=True)}"]
+    r = s.get("rules")
+    if r is not None:
+        lines += ["", "## Rules in force",
+                  f"- {len(r['overlays_in_force'])} approved setting(s) on the six core rules, {r['exceptions_in_force']} exception(s) in force, "
+                  f"{r['pending']} change(s) awaiting approval.",
+                  f"- {r['changes_recorded']} change(s) recorded in the chain (each is a signed record: who proposed, who approved, when); "
+                  f"{r['self_approved']} approved by the person who proposed it (allowed only for a single-administrator organization)."]
+        for rule_id, o in sorted(r["overlays_in_force"].items()):
+            lines.append(f"  - {rule_id}: {json.dumps(o, sort_keys=True)}")
     lines += [
         "",
         "## What this pack does not prove",

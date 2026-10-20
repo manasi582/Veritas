@@ -12,6 +12,7 @@ Measured with `tools/bench_trust.py` (run it on your own hardware: `python tools
 | | tokenise the identifiers of one event | under 1 µs when it holds none | |
 | Recognizer pack | find and mask two values in a log line | 10 µs | |
 | Payload tap (Python, ASGI) | extra time per request with every request inspected and reported (worst case), a 3 KB body with 80 items | **0.30 ms at the median, 0.35 ms at the 99th percentile** | under 1 ms |
+| Rule layer (overlays, exceptions) and the "why" trace | added per finding stored, on a developer's Mac, 2000 findings, no settings in force | **about 0.05 ms** (the trace write dominates; the rules in force are cached for 5 s) | under 1 ms |
 | Schema watch | parse one DDL statement (an `ALTER TABLE` with two changes) | 10 µs | |
 | Retention review and notice coverage | review 50 systems, 300 declared fields, 1,500 counter rows | **19 ms** and **3 ms** | |
 | Agent redaction | the agent's whole path per line (scan, mask or hash, count, queue-ready) | mask 11 µs, hash 14 µs | under 1.5 ms (test) |

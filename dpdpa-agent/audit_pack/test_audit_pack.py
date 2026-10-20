@@ -62,3 +62,17 @@ def test_verifier_binaries_are_added_when_a_folder_is_named(tmp_path, monkeypatc
     monkeypatch.setenv("VERITAS_VERIFIER_DIR", str(tmp_path))
     z = zipfile.ZipFile(io.BytesIO(fetch().content))
     assert "veritas-verify_1.0_linux_amd64" in z.namelist()
+
+
+def test_summary_lists_the_rules_in_force_and_self_approvals():
+    from evidence_store.store import get_store
+    from rulebook import changes
+    seed(1)
+    store = get_store()
+    c = changes.propose(store, ORG, changes.OVERLAY, {"severity": "MEDIUM"}, "alice", None, target="PURPOSE_001")
+    changes.approve(store, ORG, c["change_id"], "alice", self_approval_allowed=True)
+    z = zipfile.ZipFile(io.BytesIO(fetch().content))
+    s = json.loads(z.read("summary.json"))["rules"]
+    assert s["changes_recorded"] == 1 and s["self_approved"] == 1 and "PURPOSE_001" in s["overlays_in_force"]
+    text = z.read("SUMMARY.md").decode()
+    assert "## Rules in force" in text and "approved by the person who proposed it" in text

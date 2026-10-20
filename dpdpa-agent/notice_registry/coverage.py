@@ -156,7 +156,15 @@ def sweep(store, org: str, cfg) -> int:
     raised = 0
     for o in found["observed"]:
         verdicts = gaps_for_event(store, org, cfg, o["system"], [o["category"]], str(uuid.uuid4()), SourceType.LOG)
-        for v in verdicts:
-            store.append(build_deferred_explanation(v), grouping=tuple(template_of(f"no current notice covers {o['category']} in {o['system']}")))
+        if not verdicts:
+            continue
+        from rulebook import changes as rule_changes, trace as rule_trace
+        from rulebook.apply import apply as rule_apply
+        for d in rule_apply(store, org, verdicts, None, []):      # the rules in force apply here too: overlays, exceptions, the trace
+            if d.suppressed_by:
+                rule_changes.count_exception_hit(store, org, d.suppressed_by)
+                continue
+            store.append(build_deferred_explanation(d.verdict), grouping=tuple(template_of(f"no current notice covers {o['category']} in {o['system']}")))
+            rule_trace.write(store, org, str(d.verdict.verdict_id), d.trace["rule_version"], d.trace)
             raised += 1
     return raised

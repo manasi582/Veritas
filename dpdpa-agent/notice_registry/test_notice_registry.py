@@ -176,3 +176,23 @@ def test_the_finding_explains_what_it_checks_and_what_it_cannot(store):
     text = build_deferred_explanation(v).explanation
     assert "no current notice" in text
     assert "cannot tell whether the notice was shown" in text and "legally adequate" in text
+
+
+def test_the_daily_sweep_obeys_the_rules_in_force_and_keeps_a_trace(store):
+    from rulebook import changes, trace
+    see(store, "order-service", "phone")
+    ends = (datetime.now(timezone.utc) + timedelta(days=10)).date().isoformat()
+    e = changes.propose(store, ORG, changes.EXCEPTION, {"rule_id": "NOTICE_001", "system": "order-service", "field": "*", "owner": "Orders",
+                                                       "reason": "notice is being re-issued this month", "expires_at": ends}, "alice")
+    changes.approve(store, ORG, e["change_id"], "bob")
+    assert coverage.sweep(store, ORG, policy([notice(retired=True)])) == 0           # inside an approved exception: counted, not raised
+    assert changes.exception_hits(store, ORG)[e["change_id"]] == 1
+    changes.revoke(store, ORG, e["change_id"], "alice", "done")
+    changes.invalidate(ORG)
+    with store.writer() as conn:                                                       # the gap row from the first pass would block a repeat
+        conn.execute("DELETE FROM notice_gaps WHERE org = ?", (ORG,))
+    assert coverage.sweep(store, ORG, policy([notice(retired=True)])) == 1
+    rows, _ = store.list_incidents(ORG)
+    v = store.incident_verdicts(ORG, rows[0]["incident_id"])[0]
+    t = trace.read(store, ORG, v["verdict_id"])
+    assert t and t["rule_id"] == "NOTICE_001" and t["clauses"]

@@ -403,6 +403,34 @@ class Redactor:
         self.active = any(m != "monitor" for m in self.modes.values())
         self._entities = [e for e, l in (vr.LABELS.items() if vr else []) if self.modes.get(l.lower(), "monitor") != "monitor"]
 
+    _STRICTNESS = {"monitor": 0, "mask": 1, "hash": 2, "drop": 3}
+
+    def set_server_floor(self, kinds: Any) -> bool:
+        """
+        Apply the minimum modes the server asks for (an approved rule with the redact action). They can only make a kind
+        stricter than the local configuration, never looser; an empty answer removes the server's part and the local
+        configuration stands. Hash needs the key, so until one is held it is applied as mask. True if anything changed.
+        """
+        if vr is None or not isinstance(kinds, dict):
+            return False
+        if not hasattr(self, "_local_modes"):
+            self._local_modes = dict(self.modes)
+        wanted: Dict[str, str] = {}
+        for kind, mode in kinds.items():
+            kind, mode = str(kind).lower(), str(mode).lower()
+            if kind in self._local_modes and mode in ("mask", "hash", "drop"):
+                wanted[kind] = "mask" if (mode == "hash" and not self.key) else mode
+        new = dict(self._local_modes)
+        for kind, mode in wanted.items():
+            if self._STRICTNESS[mode] > self._STRICTNESS[new[kind]]:
+                new[kind] = mode
+        if new == self.modes:
+            return False
+        self.modes = new
+        self.active = any(m != "monitor" for m in self.modes.values())
+        self._entities = [e for e, l in vr.LABELS.items() if self.modes.get(l.lower(), "monitor") != "monitor"]
+        return True
+
     def set_delivered_key(self, key_id: str, key_hex: str) -> bool:
         """Use the key the server delivered (unless the configuration pins one). True if it changed."""
         if self.key_pinned or not vr:
@@ -1788,6 +1816,8 @@ def heartbeat_loop(
                 try:
                     answer = resp.json()
                     note_server_versions(answer)
+                    if isinstance(answer, dict) and "redaction_floor" in answer and REDACTOR.set_server_floor(answer.get("redaction_floor")):
+                        logger.info("The server's rules now ask for stricter redaction: %s", REDACTOR.describe()["categories"])
                     new_key = answer.get("redaction_key") if isinstance(answer, dict) else None
                     if isinstance(new_key, dict) and REDACTOR.set_delivered_key(str(new_key.get("key_id", "")), str(new_key.get("key", ""))):
                         state["redaction_key"] = {"key_id": str(new_key["key_id"]), "key": str(new_key["key"])}

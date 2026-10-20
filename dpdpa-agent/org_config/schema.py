@@ -295,6 +295,8 @@ class OrgOwner(BaseModel):
     team: Optional[str] = Field(default=None, max_length=120)
     email: Optional[str] = Field(default=None, max_length=200)
     slack_channel: Optional[str] = Field(default=None, max_length=120)
+    escalation_contact: Optional[str] = Field(default=None, max_length=200,
+                                              description="Who to name when a finding is left unacknowledged and its rule escalates.")
 
 
 # ---------------------------------------------------------------------------

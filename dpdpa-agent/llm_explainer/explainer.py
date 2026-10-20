@@ -150,8 +150,8 @@ def _build_fallback(verdict: Verdict, rule_id: str) -> ExplainedVerdict:
         )
     else:
         explanation = (
-            f"Violation: {rule_id} — {verdict.field!r} exposed "
-            f"in {verdict.source_system}. See {section}."
+            f"Possible control failure ({rule_id}): personal data in {verdict.field!r} was seen "
+            f"in {verdict.source_system}. A technical signal, not a legal conclusion. See {section}."
         )
     return ExplainedVerdict(
         verdict=verdict,
@@ -203,7 +203,7 @@ def _call_llm(verdict: Verdict, snippet: dict) -> Optional[_LLMResponse]:
             return None
 
         prompt = f"""You are a DPDPA (Digital Personal Data Protection Act 2023) compliance analyst assistant.
-You will be given a compliance violation verdict and the relevant statute text.
+You will be given a finding (a possible control failure raised by a rule) and the relevant statute text.
 Your task is to produce a concise, human-readable explanation for a compliance auditor.
 
 VERDICT:
@@ -215,7 +215,7 @@ Text: {snippet['text']}
 
 Respond with ONLY valid JSON matching this exact schema (no markdown, no extra text):
 {{
-  "explanation": "<2-3 sentence plain-English explanation of what went wrong and why it violates DPDPA>",
+  "explanation": "<2-3 sentence plain-English explanation of what the rule saw and why it may matter under DPDPA; say possible, never conclude that the Act was breached>",
   "section_cited": "{snippet['reference']}",
   "confidence": <float 0.0-1.0 indicating your confidence in this explanation>
 }}
@@ -223,8 +223,9 @@ Respond with ONLY valid JSON matching this exact schema (no markdown, no extra t
 Rules:
 - section_cited MUST be exactly: {snippet['reference']}
 - Do not cite any statute text not provided above
+- Do not state a legal conclusion: the finding is a technical signal, and whether it is a breach is for the organization and its counsel
 - Do not mention specific user names or invent context not in the verdict
-- Confidence should be 0.8-1.0 for clear violations, 0.5-0.8 for ambiguous cases
+- Confidence should be 0.8-1.0 for clear findings, 0.5-0.8 for ambiguous cases
 """
 
         # Detect Anthropic native SDK vs OpenAI-compatible client

@@ -75,7 +75,7 @@ Last updated: 2026-10-14. Latest release: **v1.0.22**.
 | **Org config (YAML)** | The organisation's data inventory and policy: fields, purposes, consent scopes, retention, linkage rules | Server disk, versioned |
 | **Dashboard** | Live feed, audit ledger, case handling, agent management, policy view, PDF/evidence export | Browser |
 | **License portal** | Vendor-side web app that signs `.vlic` license files | Vendor (Vercel + Supabase) |
-| **LLM (optional)** | Natural-language investigation of a violation; receives rule, field name and statute text, never raw PII. Supports cloud APIs or a local model (Ollama-compatible) | Cloud or local |
+| **LLM (optional)** | Natural-language investigation of a finding; receives rule, field name and statute text, never raw PII. Supports cloud APIs or a local model (Ollama-compatible) | Cloud or local |
 
 ### Key design choices
 - **Everything stays inside the customer network.** Agents only make outbound calls to the server. The only optional egress is the LLM call, and a local model removes even that.
@@ -226,7 +226,7 @@ For each application host:
 Each agent shows up as ACTIVE with a heartbeat. If a host is retired or compromised, **Revoke** stops it immediately.
 
 ### Week 1: tune and operate
-- Run in observation mode: review the first violations, fix the applications that log personal data, and correct the org config where the policy was too strict or too loose.
+- Run in observation mode: review the first findings, fix the applications that log personal data, and correct the org config where the policy was too strict or too loose.
 - Backups run daily by themselves, with a chain check each time; copy them off the machine (`sudo veritas backup`, `restore` and `verify-backup` are there when needed). Point monitoring at `/health` and `/ready` and collect the service logs.
 - The DPO exports the audit report when needed; the hash chain proves the records were not changed.
 

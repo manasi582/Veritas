@@ -33,7 +33,7 @@ def build(store, org: str, request_id: str) -> dict:
         head = store.chain_head(org)
     body = {
         "format": "veritas-rights-record-v1",
-        "title": {"erasure": "Lookup and erasure record", "retention": "Retention review record"}.get(r["type"], "Lookup and rights request record"),
+        "title": {"erasure": "Lookup and erasure record", "retention": "Retention review record", "review": "Finding review record"}.get(r["type"], "Lookup and rights request record"),
         "org": org, "request_id": r["request_id"], "type": r["type"], "status": r["status"],
         "requester_ref": r["requester_ref"], "received_at": r["received_at"], "due_at": r["due_at"],
         "closed_at": r["closed_at"], "generated_at": cn.rfc3339_ms(datetime.now(timezone.utc)),

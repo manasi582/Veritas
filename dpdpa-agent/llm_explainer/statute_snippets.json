@@ -6,12 +6,12 @@
   },
   "PURPOSE_001": {
     "section": "Section 6(1) of the Digital Personal Data Protection Act, 2023",
-    "text": "A Data Fiduciary shall process the personal data of a Data Principal only for the purpose for which consent was given. Personal data may not be used outside the declared purpose and consent scope under which it was originally collected. Routing personal data to a system or process whose declared consent scope does not permit that field is a purpose-limitation violation.",
+    "text": "A Data Fiduciary shall process the personal data of a Data Principal only for the purpose for which consent was given. Personal data may not be used outside the declared purpose and consent scope under which it was originally collected. Routing personal data to a system or process whose declared consent scope does not permit that field may indicate a purpose-limitation control failure; whether it is a breach of the Act is for the organization and its counsel.",
     "reference": "DPDPA 2023 § 6(1) — Lawful Processing and Purpose Limitation"
   },
   "RETENTION_001": {
     "section": "Section 8(7) of the Digital Personal Data Protection Act, 2023",
-    "text": "A Data Fiduciary shall, unless retention of personal data is necessary for compliance with any law for the time being in force, erase the personal data, upon the Data Principal withdrawing consent or as soon as it is reasonable to assume that the specified purpose is no longer being served. Data retained beyond the declared retention window constitutes a retention violation under this provision.",
+    "text": "A Data Fiduciary shall, unless retention of personal data is necessary for compliance with any law for the time being in force, erase the personal data, upon the Data Principal withdrawing consent or as soon as it is reasonable to assume that the specified purpose is no longer being served. Data retained beyond the declared retention window may indicate a retention control failure in relation to this provision; whether it is a breach of the Act is for the organization and its counsel.",
     "reference": "DPDPA 2023 § 8(7) — Erasure Obligation"
   },
   "ERASURE_001": {

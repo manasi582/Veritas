@@ -790,3 +790,15 @@ class TestVersions:
             assert runtime["version"] == "7.7.7" and runtime["min_agent_version"]
         finally:
             veritas_version.get_version.cache_clear()
+
+
+def test_heartbeat_carries_the_redaction_floor_of_approved_rules():
+    from evidence_store.store import get_store
+    from rulebook import changes
+    store = get_store()
+    org = "retail_co"
+    c = changes.propose(store, org, changes.OVERLAY, {"actions": ["alert", "redact"], "redact_kinds": {"phone": "mask"}}, "alice", None, target="EXPOSURE_001")
+    changes.approve(store, org, c["change_id"], "alice", self_approval_allowed=True)
+    changes.invalidate(org)
+    from rulebook import actions
+    assert actions.redaction_for(store, org) == {"phone": "mask"}

@@ -120,6 +120,7 @@ from evidence_store import incidents as inc
 from notice_registry import coverage as notice_cov
 from schema_watch import evaluate as schema_eval
 from subject_lookup import index as subject_index, keys as subject_keys, rights as subject_rights
+from rulebook import changes as rule_changes
 from llm_explainer.explainer import ExplainedVerdict
 from schemas.models import RemediationStatus
 
@@ -258,6 +259,7 @@ class EvidenceStore:
             subject_keys.create_tables(self._conn)
             subject_index.create_tables(self._conn)
             subject_rights.create_tables(self._conn)
+            rule_changes.create_tables(self._conn)
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_verdict_id ON evidence(verdict_id)"
             )
@@ -641,6 +643,7 @@ class EvidenceStore:
         cached = {}           # verdict_id -> (cached status, index)
         incident_status = {}  # incident_id -> replayed status
         rights_state = {}     # request_id -> replayed {status, tasks}
+        rule_state = {}       # change_id -> replayed {status, kind, proposer}
         for i, row in enumerate(rows):
             plaintext_json = decrypt_field(row["payload_json"])
             signed = json.loads(plaintext_json)
@@ -687,6 +690,9 @@ class EvidenceStore:
             elif rtype == cn.RIGHTS_EVENT:
                 if row["hash_version"] != 1 or not subject_rights.verify_event(signed, rights_state):
                     return bad(i, "EVENT_INVALID", row["row_index"])
+            elif rtype == cn.RULE_EVENT:
+                if row["hash_version"] != 1 or not rule_changes.verify_event(signed, rule_state):
+                    return bad(i, "EVENT_INVALID", row["row_index"])
             else:
                 return bad(i, "EVENT_INVALID", row["row_index"])
             expected_previous = row["row_hash"]
@@ -704,6 +710,10 @@ class EvidenceStore:
             for t in self._conn.execute("SELECT system, status FROM request_tasks WHERE request_id = ?", (r["request_id"],)):
                 if (replayed["tasks"] or {}).get(t["system"]) is not (t["status"] == "CONFIRMED"):
                     return bad(len(rows) - 1, "STATUS_CACHE_MISMATCH", rows[-1]["row_index"])
+        for r in self._conn.execute("SELECT change_id, status FROM rule_changes WHERE org = ?", (tenant_id,)):
+            replayed = rule_state.get(r["change_id"])
+            if replayed is None or replayed["status"] != r["status"]:
+                return bad(len(rows) - 1, "STATUS_CACHE_MISMATCH", rows[-1]["row_index"])
         return {"valid": True, "first_broken_index": None, "reason": None, "records": len(rows),
                 "head_hash": expected_previous if rows else None}
 

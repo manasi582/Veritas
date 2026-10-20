@@ -308,3 +308,32 @@ def test_a_damaged_delivered_key_is_ignored(monkeypatch):
     assert r.set_delivered_key("000000", good.hex()) is False          # the id does not match the key
     assert r.set_delivered_key(vr.key_id_of(good), "zz") is False
     assert r.key == b""
+
+
+# ---- a floor asked for by the server (an approved rule with the redact action) ---------------------------------
+
+def test_the_server_floor_only_makes_kinds_stricter_and_an_empty_answer_removes_it(monkeypatch):
+    r = use(monkeypatch, mode="monitor", categories={"email": "drop"})
+    assert r.modes["phone"] == "monitor" and r.modes["email"] == "drop"
+    assert r.set_server_floor({"phone": "mask", "email": "mask", "aadhaar": "drop"}) is True
+    assert r.modes["phone"] == "mask" and r.modes["aadhaar"] == "drop"
+    assert r.modes["email"] == "drop"                      # the local setting was stricter: never loosened
+    assert r.set_server_floor({"phone": "mask", "email": "mask", "aadhaar": "drop"}) is False       # nothing new
+    assert r.set_server_floor({}) is True and r.modes["phone"] == "monitor" and r.modes["email"] == "drop"
+
+
+def test_hash_asked_for_without_a_key_is_applied_as_mask_and_nonsense_is_ignored(monkeypatch):
+    r = use(monkeypatch, mode="monitor")
+    assert r.set_server_floor({"phone": "hash", "nonsense": "mask", "email": "scramble", "pan": "monitor"}) is True
+    assert r.modes["phone"] == "mask" and r.modes["email"] == "monitor" and r.modes["pan"] == "monitor"
+    assert r.set_server_floor("not a mapping") is False
+
+
+def test_a_floor_changes_what_is_actually_sent(monkeypatch):
+    use(monkeypatch, mode="monitor")
+    assert PHONE in agent.apply_redaction(f"call {PHONE} now")[0]
+    agent.REDACTOR.set_server_floor({"phone": "mask"})
+    sent, _ = agent.apply_redaction(f"call {PHONE} now")
+    assert PHONE not in sent and "REDACTED" in sent
+    agent.REDACTOR.set_server_floor({})
+    assert PHONE in agent.apply_redaction(f"call {PHONE} now")[0]

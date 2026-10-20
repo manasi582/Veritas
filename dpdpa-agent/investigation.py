@@ -118,7 +118,7 @@ def _format_breach_record(row: Dict[str, Any]) -> str:
     if row.get("matched_registry_entry"):
         lines.append(f"Registry context (declared purpose/consent/retention for this field): {json.dumps(row['matched_registry_entry'])}")
     lines.append(f"Automated explanation already on file: {row['explanation']}")
-    lines.append(f"Statute already cited for this violation: {row['section_cited']}")
+    lines.append(f"Statute already cited for this finding: {row['section_cited']}")
     return "\n".join(lines)
 
 
@@ -132,8 +132,8 @@ def _aggregate_context(store, tenant_id: str, row: Dict[str, Any]) -> str:
     all_rows = store.query(tenant_id)
     same_rule = [r for r in all_rows if r["rule_id"] == row["rule_id"] and r["violation_id"] != row["violation_id"]]
     return (
-        f"This org has {len(all_rows)} recorded violation(s) in total; "
-        f"{len(same_rule)} other violation(s) of the same rule ({row['rule_id']}) besides this one."
+        f"This org has {len(all_rows)} recorded finding(s) in total; "
+        f"{len(same_rule)} other finding(s) of the same rule ({row['rule_id']}) besides this one."
     )
 
 

@@ -87,6 +87,8 @@ from org_config.store import (
     list_registered_orgs, upload_org_config as store_upload_org_config,
 )
 from registry.loader import reload_org_config
+from rulebook import actions as rule_actions, changes as rule_changes, trace as rule_trace
+from rulebook.apply import apply as rule_apply
 from rules.engine import evaluate_event
 from schemas.models import Event, RemediationStatus, RuleId, Severity, SourceType, Verdict
 
@@ -211,7 +213,24 @@ async def _process_event(event: Event, *, write_to_store: bool,
             logger.debug("template failed", exc_info=True)
     explained_and_stored: List[tuple[ExplainedVerdict, bool, Optional[int]]] = []
 
-    for v in verdicts:
+    decisions = None
+    if store is not None and verdicts:
+        try:   # the rules in force: severity overlays and approved exceptions. With none configured this changes nothing.
+            decisions = rule_apply(store, event.tenant_id, verdicts, event, detected.matched_entities)
+        except Exception:
+            logger.warning("rule layer failed; the engine's findings stand", exc_info=True)
+    if decisions is None:
+        decisions = [None] * len(verdicts)
+    owners_for_actions: Optional[Dict[str, Any]] = None
+
+    for v0, decision in zip(verdicts, decisions):
+        v = decision.verdict if decision is not None else v0
+        if decision is not None and decision.suppressed_by:
+            try:   # inside an approved exception: not stored, not alerted, but counted so it stays visible
+                rule_changes.count_exception_hit(store, event.tenant_id, decision.suppressed_by)
+            except Exception:
+                logger.debug("exception count failed", exc_info=True)
+            continue
         explained = build_deferred_explanation(v)
         stored = False
         violation_id: Optional[int] = None
@@ -223,6 +242,19 @@ async def _process_event(event: Event, *, write_to_store: bool,
                 violation_id = row["violation_id"] if row else None
             except Exception as exc:
                 logger.error("Failed to store verdict %s: %s", v.verdict_id, exc)
+        if stored and decision is not None:
+            try:
+                rule_trace.write(store, event.tenant_id, str(v.verdict_id), decision.trace["rule_version"], decision.trace)
+                if "require_review" in decision.actions:
+                    if owners_for_actions is None:
+                        try:
+                            owners_for_actions = {k: o.model_dump() for k, o in (load_org_config(event.tenant_id).owners or {}).items()}
+                        except Exception:
+                            owners_for_actions = {}
+                    rule_actions.open_review(store, event.tenant_id, v, rule_actions.incident_of(store, event.tenant_id, str(v.verdict_id)),
+                                             owners_for_actions)
+            except Exception:
+                logger.warning("rule trace or review task failed for a finding", exc_info=True)
         explained_and_stored.append((explained, stored, violation_id))
 
         # Same live-feed payload shape run_pipeline.py's Stream-mode
@@ -237,8 +269,9 @@ async def _process_event(event: Event, *, write_to_store: bool,
             "used_fallback": explained.used_fallback,
         })
         try:   # a person is told about serious findings; a broken channel must never stop ingest
-            alerts.notify_finding(event.tenant_id, v.severity.value, v.rule_id.value, v.field, violation_id,
-                                  v.breach_notification_candidate, v.source_system)
+            if decision is None or "alert" in decision.actions:
+                alerts.notify_finding(event.tenant_id, v.severity.value, v.rule_id.value, v.field, violation_id,
+                                      v.breach_notification_candidate, v.source_system)
         except Exception:
             logger.debug("alert hand-over failed", exc_info=True)
 

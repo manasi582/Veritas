@@ -84,7 +84,7 @@ Check it: `sudo veritas test-alert` sends a test message and prints, for each ch
 
 What is sent:
 
-- **New findings.** One message a minute per organization, however many findings arrived, with counts, rules, field names and violation numbers. Never a personal data value, an explanation text or a secret.
+- **New findings.** One message a minute per organization, however many findings arrived, with counts, rules, field names and finding numbers. Never a personal data value, an explanation text or a secret.
 - **Conditions that need action:** a failed scheduled backup, a broken evidence chain, an overdue backup, a license or TLS certificate that expires within 30 days, an invalid license, a disk with less than 10% free. Each is sent once, repeated after 24 hours while it lasts, and sent again if it returns after being fixed.
 
 A channel that fails (wrong address, mail server down) is logged and does not affect Veritas.

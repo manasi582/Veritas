@@ -458,8 +458,14 @@ async def agent_heartbeat(
         current = get_store().keyring.agent_key_payload(agent.org_id)
         if red.hash_key_id != current["key_id"]:
             answer_key = {"redaction_key": current}
+    try:   # kinds an approved rule asks the agents of this organization to mask, hash or drop (stricter than their own settings only)
+        from rulebook import actions as rule_actions
+        floor = rule_actions.redaction_for(get_store(), agent.org_id)
+    except Exception:
+        floor = {}
     return {
         **answer_key,
+        "redaction_floor": floor,
         "ok": True,
         "agent_id": agent.agent_id,
         "server_version": get_version(),

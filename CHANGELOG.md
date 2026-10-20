@@ -4,6 +4,14 @@ What changed in each release, in plain language. The newest release is first. Ev
 
 ## Unreleased (1.2.0)
 
+### Rules you can tune, with guardrails
+- **Six core rules as data** (`docs/RULES.md`): what each looks at, its default severity, evidence kept and wording, shown on a new **Rules** page and by `GET /v1/{org}/rules`.
+- **Overlays and exceptions, approved by a second person** and recorded in the chain (`RULE_EVENT`): raise severity freely, lower it only to a floor (Aadhaar, PAN, card, passport and voter stay HIGH); exceptions name a scope, a reason, an owner and an end date, still count what they cover, and never cover a possible breach candidate. Core rules cannot be switched off.
+- **Actions:** `require_review` (a task for the owner), `escalate` (an alert if unacknowledged), `redact` (agents are told to mask, hash or drop, stricter only). No block action.
+- **Why this fired:** every finding records each condition of its rule, answered, and the severity before and after the organization's setting. Shown in the finding's Details and by `GET /v1/{org}/findings/{n}/why`.
+- **Wording:** findings are *possible control failures*, with the related section of the Act as context, never a conclusion. Counsel should review.
+- The audit pack lists the rules in force and any self-approved change. See `docs/RULES_STATUS.md` (customer-written rules were not built).
+
 ### Standing out: proof, prevention, breach readiness, industry packs
 - **Audit pack** (`GET /v1/{org}/audit-pack`, dashboard button): one zip with the evidence, signed checkpoints, public key, a plain summary, verify scripts and (optionally) the verifier, checkable offline. See `docs/AUDIT_PACK.md`.
 - **Pipeline gate for migrations:** `veritas_gate.py --migrations DIR --policy FILE` fails a build when a migration leaves a personal-data column the policy does not declare; a GitHub Action wraps it. See `docs/PIPELINE_GATE.md`.

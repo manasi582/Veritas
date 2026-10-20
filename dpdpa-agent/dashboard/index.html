@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Veritas — DPDPA Compliance Dashboard</title>
-  <meta name="description" content="Real-time, multi-tenant DPDPA compliance monitoring. Live violation feed, tamper-evident evidence store, and auditor-grade remediation tracking." />
+  <meta name="description" content="Real-time, multi-tenant DPDPA compliance monitoring. Live findings feed, tamper-evident evidence store, and auditor-grade remediation tracking." />
   
   <!-- jsPDF — served locally from /static/js/ (no CDN, works offline/air-gapped) -->
   <script src="/static/js/jspdf.umd.min.js"></script>
@@ -1533,6 +1533,9 @@
       <div class="nav-item" id="nav-requests" onclick="showTab('requests')" data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN,AUDITOR">
         <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg></span> Rights requests
       </div>
+      <div class="nav-item" id="nav-rules" onclick="showTab('rules')" data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN,AUDITOR">
+        <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></span> Rules
+      </div>
       <div class="nav-item" id="nav-agents" onclick="showTab('agents')">
         <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span> Agents
       </div>
@@ -1613,7 +1616,7 @@
       <main class="page-section active" id="main-overview">
         <div class="stats-bar">
           <div class="stat-card">
-            <div class="label">Total Violations</div>
+            <div class="label">Total findings</div>
             <div class="value accent" id="ov-total">0</div>
             <svg class="bg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
           </div>
@@ -1673,7 +1676,7 @@
         <div class="overview-grid">
           <!-- Top Systems -->
           <div class="overview-card">
-            <h3>Top Violating Systems</h3>
+            <h3>Systems with most findings</h3>
             <div class="leaderboard-list" id="ov-systems-list">
               <div class="empty" style="padding:20px; box-shadow:none;">No data</div>
             </div>
@@ -1702,7 +1705,7 @@
       <main class="page-section" id="main-live">
         <div class="stats-bar" id="statsBar">
           <div class="stat-card">
-            <div class="label">Total Violations</div>
+            <div class="label">Total findings</div>
             <div class="value accent" id="st-total">0</div>
             <svg class="bg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
           </div>
@@ -1829,7 +1832,7 @@
 
           <div class="filters-group" style="padding-left: 16px; border-left: 1px solid var(--border);">
             <div class="filter-item">
-              <label>Jump to Violation #</label>
+              <label>Jump to finding #</label>
               <div style="display: flex; gap: 6px;">
                 <input type="text" id="violationLookupInput" placeholder="#3" style="width:75px" onkeydown="if(event.key==='Enter')lookupViolationNumber()" />
                 <button class="btn btn-secondary" onclick="lookupViolationNumber()">Go</button>
@@ -2123,6 +2126,39 @@
         <div class="table-container" id="reqDetail" style="display:none;padding:14px;margin-top:14px;"></div>
       </main>
 
+      <!-- ====== RULES TAB ====== -->
+      <main class="page-section" id="main-rules">
+        <div class="section-header">
+          <h2>Rules in force</h2>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary" onclick="loadRules()" style="font-size:0.78rem;">Refresh</button>
+            <button class="btn btn-secondary" onclick="openExceptionForm()" style="font-size:0.78rem;" data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN">Propose an exception</button>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;" id="rulesNote">Each rule shows a possible control failure: a technical signal, not a legal conclusion. Core rules cannot be switched off. Severity can be raised freely and lowered only to the floor for the kind of data. Every change needs a second person's approval and is recorded in the evidence chain.</p>
+        <div class="table-container"><div class="table-wrap">
+          <table id="rulesTable">
+            <thead><tr><th>Rule</th><th>What it looks at</th><th>By default</th><th>In force</th><th>Pending</th><th>Action</th></tr></thead>
+            <tbody id="rulesTbody"><tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading…</td></tr></tbody>
+          </table>
+        </div></div>
+        <div class="table-container" id="ruleForm" style="display:none;padding:14px;margin-top:14px;"></div>
+        <div class="section-header" style="margin-top:18px;"><h2 style="font-size:1rem;">Changes</h2></div>
+        <div class="table-container"><div class="table-wrap">
+          <table id="ruleChangesTable">
+            <thead><tr><th>#</th><th>Kind</th><th>What</th><th>Proposed by</th><th>Status</th><th>Decided by</th><th>Action</th></tr></thead>
+            <tbody id="ruleChangesTbody"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1rem;">No changes yet.</td></tr></tbody>
+          </table>
+        </div></div>
+        <div class="section-header" style="margin-top:18px;"><h2 style="font-size:1rem;">Exceptions in force</h2></div>
+        <div class="table-container"><div class="table-wrap">
+          <table id="ruleExceptionsTable">
+            <thead><tr><th>#</th><th>Rule</th><th>Scope</th><th>Reason</th><th>Owner</th><th>Ends</th><th>Findings covered</th><th>Action</th></tr></thead>
+            <tbody id="ruleExceptionsTbody"><tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1rem;">None. An exception always ends on a date.</td></tr></tbody>
+          </table>
+        </div></div>
+      </main>
+
       <!-- ====== AGENTS TAB ====== -->
       <main class="page-section" id="main-agents">
 
@@ -2390,7 +2426,7 @@
       </div>
       <div class="welcome-step">
         <div class="welcome-step-num">3</div>
-        <span>Production telemetry flows in — violations appear live on this dashboard</span>
+        <span>Production telemetry flows in — findings appear live on this dashboard</span>
       </div>
     </div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;gap:8px;" onclick="startOnboarding()">
@@ -2613,12 +2649,14 @@ function showTab(name) {
     'simulate':  'Scan Sandbox',
     'flows':     'Data map',
     'requests':  'Rights requests',
+    'rules':     'Rules',
   };
   document.getElementById('pageTitle').innerText = titleMap[name] || name;
 
   if (name === 'audit')    { loadAuditTable(); refreshStats(); }
   if (name === 'flows')    { loadFlows(); }
   if (name === 'requests') { loadRequests(); }
+  if (name === 'rules')    { loadRules(); }
   if (name === 'overview') { refreshOverview(); refreshHealth(); }
   if (name === 'agents')   { loadAgents(); }
   if (name === 'auditlog') { loadAuditLog(); }
@@ -3312,6 +3350,147 @@ async function runLookup() {
 
 let requestRows = [];
 
+// ---- Rules: what is in force, proposals, approvals, exceptions ----
+let rulesState = {rules: [], self_approval_allowed: false};
+
+async function loadRules() {
+  if (!currentOrgId) return;
+  const base = `/v1/${encodeURIComponent(currentOrgId)}/rules`;
+  try {
+    const [r, c, e] = await Promise.all([fetch(base, {credentials: 'include'}), fetch(base + '/changes', {credentials: 'include'}),
+                                         fetch(base + '/exceptions', {credentials: 'include'})]);
+    if (!r.ok) throw new Error(r.status);
+    rulesState = await r.json();
+    renderRules();
+    renderRuleChanges(c.ok ? (await c.json()).changes : []);
+    renderRuleExceptions(e.ok ? (await e.json()).exceptions : []);
+  } catch (err) { showToast('Failed to load rules', 'error'); }
+}
+
+function ruleSettingText(o) {
+  if (!o) return '<span style="color:var(--text-muted)">the rule\'s own</span>';
+  const bits = [];
+  if (o.severity) bits.push('severity ' + escapeHtml(o.severity));
+  bits.push('actions: ' + escapeHtml((o.actions || ['alert']).join(', ')));
+  if (o.escalate_after_minutes) bits.push('escalate after ' + escapeHtml(o.escalate_after_minutes) + ' min');
+  if (o.redact_kinds) bits.push('redact ' + escapeHtml(Object.entries(o.redact_kinds).map(([k, m]) => k + ':' + m).join(', ')));
+  return bits.join('<br>');
+}
+
+function renderRules() {
+  const tbody = document.getElementById('rulesTbody');
+  tbody.innerHTML = (rulesState.rules || []).map(x => `<tr>
+    <td><b>${escapeHtml(x.title)}</b><br><span class="mono" style="font-size:11px;color:var(--text-muted)">${escapeHtml(x.rule_id)} v${escapeHtml(x.version)}</span>
+        <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;max-width:340px">${escapeHtml(x.summary)}</div></td>
+    <td style="font-size:12px"><ul style="margin:0;padding-left:16px">${x.looks_at.map(t => '<li>' + escapeHtml(t) + '</li>').join('')}</ul></td>
+    <td>${escapeHtml(x.default_severity)}<br><span style="font-size:11px;color:var(--text-muted)">alert</span></td>
+    <td style="font-size:12px">${ruleSettingText(x.overlay)}</td>
+    <td>${x.pending.length ? x.pending.map(n => '#' + escapeHtml(n)).join(', ') : '—'}</td>
+    <td><span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN"><button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="openOverlayForm('${safeId(x.rule_id)}')">Propose change</button></span></td></tr>`).join('');
+  if (window.__veritasRole) applyRoleUI(window.__veritasRole);
+}
+
+function renderRuleChanges(rows) {
+  const tbody = document.getElementById('ruleChangesTbody');
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1rem;">No changes yet.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(c => {
+    const what = c.kind === 'OVERLAY' ? escapeHtml(c.target) + ': ' + ruleSettingText(c.setting)
+      : escapeHtml(c.setting.rule_id) + ' on ' + escapeHtml(c.setting.system) + ' / ' + escapeHtml(c.setting.field) + ' until ' + escapeHtml(c.setting.expires_at);
+    const id = safeId(c.change_id);
+    let act = '';
+    if (c.status === 'PROPOSED') act = `<button class="btn btn-primary" style="padding:4px 9px;font-size:11px;" onclick="ruleDecision('${id}','approve')">Approve</button> <button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="ruleDecision('${id}','reject')">Reject</button> <button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="ruleDecision('${id}','withdraw')">Withdraw</button>`;
+    return `<tr><td class="mono">${escapeHtml(c.number)}</td><td>${escapeHtml(c.kind.toLowerCase())}</td><td style="font-size:12px">${what}${c.proposed_reason ? '<div style="color:var(--text-muted);font-size:11px">' + escapeHtml(c.proposed_reason) + '</div>' : ''}</td>
+      <td>${escapeHtml(c.proposed_by)}</td><td><span class="status-badge ${c.status === 'APPROVED' ? 'RESOLVED' : (c.status === 'PROPOSED' ? 'ACKNOWLEDGED' : 'OPEN')}">${escapeHtml(c.status)}</span>${c.self_approved ? ' <span class="badge MEDIUM" title="approved by the person who proposed it (single-administrator organization)">self-approved</span>' : ''}</td>
+      <td>${escapeHtml(c.decided_by || '—')}</td><td><span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN">${act}</span></td></tr>`;
+  }).join('');
+  if (window.__veritasRole) applyRoleUI(window.__veritasRole);
+}
+
+function renderRuleExceptions(rows) {
+  const tbody = document.getElementById('ruleExceptionsTbody');
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1rem;">None. An exception always ends on a date.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(c => `<tr><td class="mono">${escapeHtml(c.number)}</td><td class="mono">${escapeHtml(c.setting.rule_id)}</td>
+    <td>${escapeHtml(c.setting.system)} / ${escapeHtml(c.setting.field)}</td><td style="font-size:12px">${escapeHtml(c.setting.reason)}</td>
+    <td>${escapeHtml(c.setting.owner)}</td><td>${escapeHtml(c.setting.expires_at)}</td><td>${escapeHtml(c.findings_covered)}</td>
+    <td><span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN"><button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="ruleDecision('${safeId(c.change_id)}','revoke')">End now</button></span></td></tr>`).join('');
+  if (window.__veritasRole) applyRoleUI(window.__veritasRole);
+}
+
+async function ruleDecision(id, what) {
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/rules/changes/${id}/${what}`, {
+      method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: '{}'});
+    if (!r.ok) { const d = await r.json(); showToast(typeof d.detail === 'string' ? d.detail : 'Not allowed', 'error'); return; }
+    showToast('Done: ' + what, 'success');
+    loadRules();
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
+function openOverlayForm(ruleId) {
+  const box = document.getElementById('ruleForm');
+  box.style.display = 'block';
+  box.innerHTML = `<h4 style="margin:0 0 8px">Propose a change to ${escapeHtml(ruleId)}</h4>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;font-size:12px">
+      <label>Severity<br><select id="rfSeverity"><option value="">the rule's own</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option></select></label>
+      <label><input type="checkbox" id="rfRequireReview"> require review (a task for the system's owner)</label>
+      <label><input type="checkbox" id="rfEscalate"> escalate if unacknowledged after <input type="number" id="rfMinutes" value="60" min="15" max="10080" style="width:70px"> min</label>
+      <label><input type="checkbox" id="rfRedact"> redact at the agents: <input type="text" id="rfKinds" placeholder="phone:mask, aadhaar:hash" style="width:200px"></label>
+    </div>
+    <div style="margin-top:8px"><input type="text" id="rfReason" placeholder="why (shown to the approver)" style="width:60%"></div>
+    <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Aadhaar, PAN, card, passport and voter findings never go below HIGH. There is no block action.</div>
+    <div style="margin-top:10px"><button class="btn btn-primary" onclick="submitOverlay('${safeId(ruleId)}')">Propose</button> <button class="btn btn-secondary" onclick="document.getElementById('ruleForm').style.display='none'">Cancel</button></div>`;
+}
+
+async function submitOverlay(ruleId) {
+  const actions = ['alert'];
+  if (document.getElementById('rfRequireReview').checked) actions.push('require_review');
+  const setting = {severity: document.getElementById('rfSeverity').value || null, actions};
+  if (document.getElementById('rfEscalate').checked) { actions.push('escalate'); setting.escalate_after_minutes = parseInt(document.getElementById('rfMinutes').value, 10); }
+  if (document.getElementById('rfRedact').checked) {
+    actions.push('redact');
+    setting.redact_kinds = {};
+    document.getElementById('rfKinds').value.split(',').map(x => x.trim()).filter(Boolean).forEach(p => { const [k, m] = p.split(':'); if (k && m) setting.redact_kinds[k.trim().toLowerCase()] = m.trim().toLowerCase(); });
+  }
+  await postRuleChange({kind: 'OVERLAY', target: ruleId, setting, reason: document.getElementById('rfReason').value});
+}
+
+function openExceptionForm() {
+  const box = document.getElementById('ruleForm');
+  box.style.display = 'block';
+  const rules = (rulesState.rules || []).map(x => `<option value="${escapeAttr(x.rule_id)}">${escapeHtml(x.rule_id)}</option>`).join('');
+  box.innerHTML = `<h4 style="margin:0 0 8px">Propose an exception</h4>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;font-size:12px">
+      <label>Rule<br><select id="efRule">${rules}</select></label>
+      <label>System<br><input type="text" id="efSystem" placeholder="orders-service or *"></label>
+      <label>Field<br><input type="text" id="efField" value="*"></label>
+      <label>Ends on<br><input type="date" id="efEnds"></label>
+      <label>Owner<br><input type="text" id="efOwner" placeholder="Orders team"></label>
+      <label>Ticket<br><input type="text" id="efTicket" placeholder="optional"></label>
+    </div>
+    <div style="margin-top:8px"><input type="text" id="efReason" placeholder="why this is accepted for now (10 or more characters)" style="width:70%"></div>
+    <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">An exception must narrow to a system or a field, always ends, still counts the findings it covers, and never covers a possible breach candidate.</div>
+    <div style="margin-top:10px"><button class="btn btn-primary" onclick="submitException()">Propose</button> <button class="btn btn-secondary" onclick="document.getElementById('ruleForm').style.display='none'">Cancel</button></div>`;
+}
+
+async function submitException() {
+  const g = id => document.getElementById(id).value.trim();
+  const setting = {rule_id: g('efRule'), system: g('efSystem') || '*', field: g('efField') || '*', expires_at: g('efEnds'), owner: g('efOwner'), reason: g('efReason')};
+  if (g('efTicket')) setting.ticket = g('efTicket');
+  await postRuleChange({kind: 'EXCEPTION', setting, reason: g('efReason')});
+}
+
+async function postRuleChange(body) {
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/rules/changes`, {
+      method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const d = await r.json();
+    if (!r.ok) { showToast(typeof d.detail === 'string' ? d.detail : 'Not accepted', 'error'); return; }
+    document.getElementById('ruleForm').style.display = 'none';
+    showToast(rulesState.self_approval_allowed ? 'Proposed. You are the only administrator, so you can approve it yourself; that will be recorded.' : 'Proposed. A different administrator must approve it.', 'success');
+    loadRules();
+  } catch (e) { showToast('Network error', 'error'); }
+}
+
 async function loadRequests() {
   if (!currentOrgId) return;
   try {
@@ -3479,7 +3658,7 @@ let investigateViolationId = null;
 const INVESTIGATE_SUGGESTIONS = [
   'What exactly is the breach here?',
   'Explain this breach in simple terms.',
-  'Why is this considered a violation?',
+  'Why is this flagged as a possible control failure?',
   'How serious is this breach and why?',
   'Give me step-by-step remediation actions.',
   'Has this type of breach occurred elsewhere?',
@@ -3505,11 +3684,13 @@ async function openDrawer(verdictId) {
       ${v.breach_notification_candidate ? `<span class="badge breach"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Breach Candidate</span>` : ''}
       ${v.used_fallback ? '<span class="badge fallback">Template Explanation</span>' : ''}
     </div>
-    <div class="drawer-field"><div class="lbl">Violating Field</div><div class="val mono" style="color:var(--text-headings)">${escapeHtml(v.field)}</div></div>
+    <div class="drawer-field"><div class="lbl">Field</div><div class="val mono" style="color:var(--text-headings)">${escapeHtml(v.field)}</div></div>
     <div class="drawer-field"><div class="lbl">Source System</div><div class="val">${escapeHtml(v.source_system)}</div></div>
     <div class="drawer-field"><div class="lbl">Timestamp</div><div class="val" style="font-variant-numeric:tabular-nums">${ts}</div></div>
     <div class="drawer-field"><div class="lbl">Statute-Grounded Explanation</div><div class="val">${escapeHtml(v.explanation)}</div></div>
     <div class="drawer-field"><div class="lbl">Statute Citation</div><div class="val mono" style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.7"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg> ${escapeHtml(v.section_cited)}</div></div>
+
+    <div class="drawer-field" id="whyBox"><div class="lbl">Why this fired</div><div class="val" id="whyBody" style="font-size:12.5px">Loading…</div></div>
 
     <div style="display:flex; gap:14px; margin-top:18px;">
       <div class="drawer-field" style="flex:1;"><div class="lbl">Current Status</div><div class="val" style="background:transparent; padding:0; box-shadow:none;"><span class="status-badge ${safeId(v.remediation_status)}">${escapeHtml(v.remediation_status)}</span></div></div>
@@ -3525,13 +3706,13 @@ async function openDrawer(verdictId) {
     </div>
 
     <div class="investigate-panel">
-      <h4>Investigate Violation #${escapeHtml(v.violation_id)}</h4>
+      <h4>Investigate finding #${escapeHtml(v.violation_id)}</h4>
       <div class="investigate-log" id="investigateLog"></div>
       <div class="investigate-suggestions">
         ${INVESTIGATE_SUGGESTIONS.map(q => `<button onclick="askInvestigation(${escapeAttr(JSON.stringify(q))})">${escapeHtml(q)}</button>`).join('')}
       </div>
       <div class="investigate-input-row">
-        <input type="text" id="investigateInput" placeholder="Ask anything about violation #${escapeAttr(v.violation_id)}…"
+        <input type="text" id="investigateInput" placeholder="Ask anything about finding #${escapeAttr(v.violation_id)}…"
                onkeydown="if(event.key==='Enter')askInvestigation()" />
         <button class="btn btn-primary" onclick="askInvestigation()">Ask</button>
       </div>
@@ -3540,6 +3721,30 @@ async function openDrawer(verdictId) {
 
   document.getElementById('drawerOverlay').classList.add('open');
   document.getElementById('drawer').classList.add('open');
+  loadWhy(v.violation_id);
+}
+
+// ---- Why this fired: the rule's conditions, each answered, built when the finding was raised ----
+async function loadWhy(n) {
+  const el = document.getElementById('whyBody');
+  if (!el) return;
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/findings/${encodeURIComponent(n)}/why`, {credentials: 'include'});
+    if (!r.ok) { el.textContent = 'Not available.'; return; }
+    const d = await r.json();
+    const rule = d.rule ? `<div style="margin-bottom:6px"><b>${escapeHtml(d.rule.title)}</b> <span class="mono" style="color:var(--text-muted);font-size:11px">${escapeHtml(d.rule.rule_id)}</span></div>` : '';
+    if (!d.recorded) {
+      el.innerHTML = rule + `<div style="color:var(--text-muted)">${escapeHtml(d.note)}</div>` + (d.rule ? '<ul style="margin:6px 0 0;padding-left:16px">' + d.rule.looks_at.map(t => '<li>' + escapeHtml(t) + '</li>').join('') + '</ul>' : '');
+      return;
+    }
+    const t = d.trace;
+    const clauses = t.clauses.map(c => `<li>${c.matched ? '&#10003;' : '&#10007;'} ${escapeHtml(c.clause)}${c.detail ? '<div style="color:var(--text-muted);margin-left:14px">' + escapeHtml(c.detail) + '</div>' : ''}</li>`).join('');
+    const sev = t.engine_severity === t.final_severity ? escapeHtml(t.final_severity) : `${escapeHtml(t.engine_severity)} by the rule, ${escapeHtml(t.final_severity)} after this organization's approved setting`;
+    const exc = t.exception ? `<div style="margin-top:6px">Exception #${escapeHtml(t.exception.number)}: ${t.exception.applied ? 'applies' : 'does not apply'}${t.exception.note ? ' (' + escapeHtml(t.exception.note) + ')' : ''}</div>` : '';
+    el.innerHTML = rule + `<ul style="list-style:none;margin:0;padding:0">${clauses}</ul>
+      <div style="margin-top:6px">Severity: ${sev}. Rule version ${escapeHtml(t.rule_version)}.</div>${exc}
+      <div style="margin-top:6px;color:var(--text-muted)">${escapeHtml(d.note)}</div>`;
+  } catch (e) { el.textContent = 'Not available.'; }
 }
 
 function closeDrawer() {
@@ -3553,13 +3758,13 @@ async function lookupViolationNumber() {
   const raw = document.getElementById('violationLookupInput').value.trim().replace(/^#/, '');
   const n = parseInt(raw, 10);
   if (!raw || isNaN(n) || n < 1) {
-    showToast('Enter a valid violation number', 'error');
+    showToast('Enter a valid finding number', 'error');
     return;
   }
   try {
     const r = await fetch(`/api/${encodeURIComponent(currentOrgId)}/violations/${n}`);
     if (!r.ok) {
-      showToast(`No violation #${n} found for this org`, 'error');
+      showToast(`No finding #${n} found for this org`, 'error');
       return;
     }
     const v = await r.json();
@@ -4010,7 +4215,7 @@ function renderSimResults(data) {
     out.innerHTML = `
       <div class="drawer-field"><div class="lbl">Entities Detected</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${entitiesHtml || '<span style="color:var(--text-muted);font-size:12px;">None</span>'}</div></div>
       <div class="empty" style="box-shadow:none; padding:24px 0;">
-        <p>No policy violation triggered for this payload${data.contains_pii ? ' — PII was detected but complied with all configured rules.' : '.'}</p>
+        <p>No rule fired for this payload${data.contains_pii ? ' — personal data was detected, but no rule fired.' : '.'}</p>
       </div>`;
     return;
   }
@@ -4096,7 +4301,7 @@ async function downloadAuditPDF() {
   doc.setTextColor(80, 80, 80);
 
   const summaryLines = [
-    `Total Violations: ${total}   |   HIGH: ${byHigh}   MEDIUM: ${byMed}   LOW: ${byLow}`,
+    `Total findings: ${total}   |   HIGH: ${byHigh}   MEDIUM: ${byMed}   LOW: ${byLow}`,
     `Status — OPEN: ${open}   ACKNOWLEDGED: ${acked}   RESOLVED: ${resolved}   |   Breach Candidates: ${breaches}`,
   ];
   summaryLines.forEach((line, i) => doc.text(line, 14, 36 + i * 5));

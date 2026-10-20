@@ -25,6 +25,7 @@ import tempfile
 import threading
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
@@ -34,9 +35,11 @@ import requests
 ROOT = Path(__file__).resolve().parents[1]
 SERVER_DIR, AGENT_DIR = ROOT / "dpdpa-agent", ROOT / "veritas-agent"
 ORG, OTHER = "e2e_corp", "other_org"
+# a number nobody asked to erase, so the erasure watch stays quiet in the rules step
+OTHER_PHONE = "9812345670"
 PHONE, AADHAAR, EMAIL = "9876543210", "2345 6789 0124", "asha.rao@example.com"
 PASSWORD = "Violet-Harbor#2468-e2e"
-RAW = (PHONE, AADHAAR, "234567890124", EMAIL, "asha.rao")
+RAW = (PHONE, OTHER_PHONE, AADHAAR, "234567890124", EMAIL, "asha.rao")
 
 
 class Failure(AssertionError):
@@ -536,6 +539,73 @@ class E2E:
             code, out = self.verify(v, self.exports[org])
             check(code == 0, f"the verifier rejected clean evidence of {org}: {out}")
         print("    the verifier accepts the clean export of both organizations")
+
+        step("rules: approved overlays and exceptions, a review task, the agent's redaction floor, and why a finding fired")
+        rules = self.get(self.admins, f"/v1/{ORG}/rules").json()
+        check([r["rule_id"] for r in rules["rules"]] == ["EXPOSURE_001", "PURPOSE_001", "RETENTION_001", "LINKAGE_001", "ERASURE_001", "NOTICE_001"], "the rules are not the six")
+        check(not rules["self_approval_allowed"], "self-approval is allowed although two administrators exist")
+        check(all("violation" not in r["summary"].lower() for r in rules["rules"]), "a rule's summary says violation")
+        check(self.post(self.admins, f"/v1/{ORG}/rules/changes", expect=(400,), json={"kind": "OVERLAY", "target": "EXPOSURE_001", "setting": {"actions": ["block"]}}).status_code == 400,
+              "a block action was accepted")
+        change = self.post(self.admins, f"/v1/{ORG}/rules/changes", json={"kind": "OVERLAY", "target": "EXPOSURE_001", "reason": "owners review log exposure",
+                                                                         "setting": {"actions": ["alert", "require_review"]}}).json()
+        self.post(self.admins, f"/v1/{ORG}/rules/changes/{change['change_id']}/approve", expect=(400,), json={})      # not the proposer
+        check(self.post(self.super, f"/v1/{ORG}/rules/changes/{change['change_id']}/approve", json={}).json()["status"] == "APPROVED", "the second administrator could not approve")
+        floor = self.post(self.admins, f"/v1/{ORG}/rules/changes", json={"kind": "OVERLAY", "target": "PURPOSE_001", "reason": "mask phone numbers at the source",
+                                                                        "setting": {"actions": ["alert", "redact"], "redact_kinds": {"phone": "mask"}}}).json()
+        self.post(self.super, f"/v1/{ORG}/rules/changes/{floor['change_id']}/approve", json={})
+
+        key = self.new_agent_token(self.admins, ORG)
+        tok2 = requests.post(self.base + "/agent/register", json={"registration_key": key, "source_label": "rules-demo"}, timeout=30).json()["auth_token"]
+
+        def send_line(system, line):
+            r = requests.post(f"{self.base}/v1/{ORG}/events", headers={"Authorization": f"Bearer {tok2}"}, timeout=60,
+                              json={"source_type": "log", "source_system": system, "raw_snippet": line})
+            check(r.status_code == 200, f"event refused: {r.status_code} {r.text[:200]}")
+
+        def open_reviews():
+            return [q for q in self.get(self.admins, f"/v1/{ORG}/requests").json()["requests"] if q["type"] == "review" and q["status"] == "OPEN"]
+
+        check(not open_reviews(), "a review task existed before any rule asked for one")
+        send_line("order-service", "debug rules demo first line phone " + OTHER_PHONE)
+        reviews = open_reviews()
+        check(len(reviews) == 1 and reviews[0]["tasks"][0]["system"] == "order-service" and reviews[0]["tasks"][0]["owner"].startswith("Orders"),
+              "the require_review action did not open one task for the owner")
+        send_line("order-service", "debug rules demo first line phone " + OTHER_PHONE)
+        check(len(open_reviews()) == 1, "a second finding of the same incident opened a second review task")
+        done = self.post(self.admins, f"/v1/{ORG}/requests/{reviews[0]['request_id']}/tasks/order-service/confirm", json={"note": "e2e"}).json()
+        check(done["status"] == "CLOSED", "confirming the review task did not close it")
+
+        before = self.verdict_count(self.admins)
+        send_line("exception-demo", "debug exception demo phone " + OTHER_PHONE)
+        check(self.verdict_count(self.admins) == before + 1, "the finding before the exception was not stored")
+        exc = self.post(self.admins, f"/v1/{ORG}/rules/changes", json={"kind": "EXCEPTION", "reason": "known debug logging, being removed",
+              "setting": {"rule_id": "EXPOSURE_001", "system": "exception-demo", "field": "*", "reason": "known debug logging, being removed",
+                          "owner": "Platform team", "expires_at": (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()}}).json()
+        self.post(self.super, f"/v1/{ORG}/rules/changes/{exc['change_id']}/approve", json={})
+        send_line("exception-demo", "debug exception demo again phone " + OTHER_PHONE)
+        check(self.verdict_count(self.admins) == before + 1, "a finding inside an approved exception was stored")
+        covered = self.get(self.admins, f"/v1/{ORG}/rules/exceptions").json()["exceptions"]
+        check(len(covered) == 1 and covered[0]["findings_covered"] == 1, f"the exception did not count the finding it covered: {covered}")
+        send_line("exception-demo", "debug exception demo breach candidate aadhaar " + AADHAAR)
+        check(self.verdict_count(self.admins) > before + 1, "an exception suppressed a possible breach candidate")
+        newest = max((v for v in self.get(self.admins, f"/api/{ORG}/verdicts", params={"source_system": "exception-demo"}).json()["verdicts"]
+                      if v["rule_id"] == "EXPOSURE_001"), key=lambda v: v["violation_id"])
+        why = self.get(self.admins, f"/v1/{ORG}/findings/{newest['violation_id']}/why").json()
+        check(why["recorded"] and why["trace"]["clauses"] and all("detail" in c or c["matched"] for c in why["trace"]["clauses"]) and "counsel" in why["note"], f"why: {why}")
+        check(why["trace"]["exception"] and why["trace"]["exception"]["applied"] is False, "the trace does not explain that the exception did not apply")
+        check(not any(raw in json.dumps(why) for raw in RAW), "the trace holds a raw value")
+
+        def masked():
+            for a in self.get(self.admins, f"/agents?org_id={ORG}").json()["agents"]:
+                red = (a.get("health") or {}).get("redaction") or {}
+                if a.get("source_label") == "agent-monitor" and (red.get("categories") or {}).get("phone") == "mask":
+                    return True
+            return False
+        wait_for(masked, "the monitoring agent to take the server's redaction floor at its next heartbeat", timeout=120, interval=3)
+        print("    the monitoring agent now masks phone numbers because an approved rule asked it to")
+        check(self.get(self.admins, f"/api/{ORG}/verify-chain").json()["valid"], "the chain is not valid after rule changes")
+        print("    overlays and an exception were approved by a second person, one review task opened, the exception counted and spared a breach candidate")
 
         step("audit pack, breach pack, pipeline gate, policy packs: what an auditor, a DPO and a developer each get")
         import io

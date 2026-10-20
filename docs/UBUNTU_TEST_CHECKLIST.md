@@ -114,14 +114,14 @@ Nothing in the file may be left as a placeholder: `<HOST>` or `<...>` in the add
 - [ ] The key does **not** appear anywhere in that log.
 - [ ] **Agents** tab shows the agent as ACTIVE with version `1.0.19`, no "Outdated" badge, a recent heartbeat, and the source `app.log` as *reading*.
 
-## 6. Telemetry becomes a violation
+## 6. Telemetry becomes a finding
 
 ```bash
 echo "DEBUG customer verified with Aadhaar 2345 6789 0124" | sudo tee -a /var/log/testapp/app.log
 echo "INFO order ORD-583927 status updated to packed"      | sudo tee -a /var/log/testapp/app.log
 ```
 
-- [ ] Within about 30 seconds **Audit Ledger** shows one new `EXPOSURE_001` violation for `kyc-service` (and none for the clean line).
+- [ ] Within about 30 seconds **Audit Ledger** shows one new `EXPOSURE_001` finding for `kyc-service` (and none for the clean line).
 - [ ] Open **Details**, press **Acknowledge**, then **Mark as Resolved**: each step succeeds.
 - [ ] **Verify Cryptographic Hash Chain** says the chain is intact.
 - [ ] Restart the agent (`sudo systemctl restart veritas-agent`): the log says `Using existing identity`, and the **Agents** tab still shows **one** agent.
@@ -134,7 +134,7 @@ In the dashboard open **Users → Add User**: username `analyst1`, email `analys
 - [ ] The new user shows **Must set password**.
 - [ ] In a private browser window sign in as `analyst1`: you are forced to **choose a new password** before anything else.
 - [ ] A weak new password is refused; a good one works and the dashboard opens.
-- [ ] The viewer sees **no** Users, Audit Log or Policy tabs and cannot change a violation's status.
+- [ ] The viewer sees **no** Users, Audit Log or Policy tabs and cannot change a finding's status.
 - [ ] Back as administrator: **Reset password** for `analyst1` shows a temporary password once; the viewer's open session stops working; signing in with the temporary password again forces a change.
 - [ ] Five wrong passwords for `analyst1` (from the sign-in page) lock that account: the sixth attempt, even with the right password, is refused with "Too many failed attempts". The Audit Log shows `ACCOUNT_LOCKED`. (It frees itself after 15 minutes.)
 - [ ] `sudo veritas reset-password analyst1` prints a temporary password; signing in with it forces a password change. (Only available in releases after v1.0.19; skip on v1.0.19.)
