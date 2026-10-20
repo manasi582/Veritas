@@ -210,6 +210,7 @@ def flow(browser, pages: list) -> None:
     with page.expect_download() as dl:
         page.click("#main-flows button:has-text('Record (CSV)')")
     assert dl.value.suggested_filename.endswith(".csv")
+    page.click("#nav-audit")
 
     step("verify the cryptographic hash chain")
     page.click("button:has-text('Verify Cryptographic Hash Chain')")
