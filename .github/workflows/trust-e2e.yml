@@ -1,0 +1,58 @@
+name: Trust end-to-end
+
+# One story on a clean machine, with the real language model, real agents and the real stand-alone verifier:
+# masking in the agent, incident grouping, the observed processing map, an erasure request that is watched, and
+# anchoring with a tampering attempt that only the verifier catches (tools/trust_e2e.py, docs/TRUST_VISIBILITY_PLAN.md
+# section 5). Nothing leaves the machine and no secrets are used.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trust-e2e:
+    name: The five features together (Ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: dpdpa-agent/requirements.txt
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install dependencies and the language model
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r dpdpa-agent/requirements.txt -r veritas-agent/requirements.txt pytest
+          pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
+
+      - name: Build the stand-alone verifier
+        run: |
+          cd tools/veritas-verify
+          go build -o "$RUNNER_TEMP/veritas-verify" .
+
+      - name: Run the scenario
+        run: python tools/trust_e2e.py --workdir "$RUNNER_TEMP/e2e" --verifier "$RUNNER_TEMP/veritas-verify" --noise 6000
+
+      - name: Keep the logs if it failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trust-e2e-logs
+          path: |
+            ${{ runner.temp }}/e2e/server.log
+            ${{ runner.temp }}/e2e/*.out
+            ${{ runner.temp }}/e2e/logs/
+          if-no-files-found: ignore

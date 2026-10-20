@@ -46,6 +46,12 @@ Step-by-step guides:
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | What to do when something is wrong, by symptom |
 | [docs/SECURITY_OVERVIEW.md](docs/SECURITY_OVERVIEW.md) | For a customer's security team: how Veritas handles data, access and releases |
 | [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md) | Threat model and review package for a security reviewer |
+| [docs/DEMO.md](docs/DEMO.md) | The 15-minute demo of the trust, visibility and prevention features, with sample data |
+| [docs/ANCHORING.md](docs/ANCHORING.md), [docs/EVIDENCE_FORMAT.md](docs/EVIDENCE_FORMAT.md) | Tamper evidence: witnessed checkpoints, the stand-alone verifier, and the record format an auditor can check |
+| [docs/INCIDENTS.md](docs/INCIDENTS.md), [docs/FLOWS.md](docs/FLOWS.md) | Grouping thousands of findings into incidents; the observed processing map and record |
+| [docs/AGENT_REDACTION.md](docs/AGENT_REDACTION.md), [docs/RECOGNIZERS.md](docs/RECOGNIZERS.md) | Masking, hashing or dropping personal data in the agent, and the shared rules behind it |
+| [docs/SUBJECT_LOOKUP.md](docs/SUBJECT_LOOKUP.md) | Where was an identifier observed, rights requests, the erasure watch and the signed record |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Measured cost of these features |
 | [docs/legal/](docs/legal/README.md) | Drafts of the license agreement, support policy and data handling statement (for legal review) |
 
 ## How it works, in one paragraph

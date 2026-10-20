@@ -75,6 +75,28 @@ Exit codes: `0` pass, `1` integrity failure, `2` a problem with what you gave it
 | `WITNESS_DIVERGENCE` | A witness copy differs from the server's copy |
 | `UNANCHORED_TAIL` | Information only: records after the last checkpoint are not covered yet |
 
+## More witnesses: e-mail, a time-stamp authority, a printable digest
+
+Besides a file share and your SIEM, a checkpoint can go to three more places (all in `anchoring.yaml` under `sinks:`):
+
+```yaml
+        - type: email                   # a mailbox outside this server
+          to: audit@yourcompany.example # one or more, comma separated
+          # host, port, security, user, password and from default to VERITAS_SMTP_* (the alert settings)
+        - type: tsa                     # an RFC 3161 time-stamp authority
+          url: https://tsa.yourcompany.example/ts
+        - type: pdf-digest              # a daily PDF of the checkpoints, to print or archive
+          path: /mnt/audit-archive/veritas-digests
+```
+
+| Witness | What it adds | What it does not |
+|---|---|---|
+| e-mail | a copy in a mailbox the Veritas account cannot reach into | the receipt is the mail server's acceptance, not proof of delivery; the verifier does not read mail (copy the checkpoint into a witness folder to check it) |
+| time-stamp authority | a signed statement from a third party that the checkpoint (its SHA-256) existed at that time. The token is kept as the receipt (`tsr:` and base64). Check one with `openssl ts -verify -data <checkpoint line> -in token.tsr -CAfile <authority certificate>`; the checkpoint line is the single line of JSON a file witness holds, without its newline | `veritas-verify` does not check tokens; Veritas checks only that the response is a granted answer to its own request, not the authority's signature |
+| PDF digest | a page a person can print or file; the same checkpoints are kept as lines of JSON beside it | it is a witness only as far as its folder is: use write-once or off-box storage |
+
+Only witnesses that Veritas can reach count toward `min_witnesses`; each one that accepts a checkpoint counts, including these. Choose `min_witnesses` knowing which of your witnesses an auditor can actually check.
+
 ## A demonstration
 
 1. Anchoring on with two file witnesses; a few findings; wait for a checkpoint (or `POST /v1/ORG/anchors/run`).

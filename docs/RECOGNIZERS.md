@@ -15,7 +15,7 @@ One small file, `veritas_recognizers.py`, holds the rules that find *structured*
 ## Why one file
 
 - The server builds its Presidio recognizers **from** `veritas_recognizers.RULES` (patterns, scores, context words) and imports its Aadhaar and PAN validators from it. Nothing is written twice.
-- The agent ships the identical file next to `agent.py` (Ubuntu package, Mac package, container). It is standard library only, so the agent stays light: about 0.1 ms per ordinary log line on a laptop (a test fails above 1 ms).
+- The agent ships the identical file next to `agent.py` (Ubuntu package, Mac package, container). It is standard library only, so the agent stays light: about 0.01 ms per ordinary log line on a laptop (a test fails above 1 ms; `docs/PERFORMANCE.md`).
 - `tests/vectors/recognizers_corpus.json` is the golden corpus: texts with the findings and the masked result they must produce. The server's tests check that its Presidio recognizers find the same things in each text, and the agent's tests check its copy produces the masked results.
 
 ## Changing a rule

@@ -1,0 +1,18 @@
+{
+  "org_id": "demo_corp",
+  "fields": [
+    {"field_name": "phone", "pii_category": "phone", "declared_purpose": "order_updates", "consent_scope": "service_delivery", "retention_days": 365, "source_system": "order-service"},
+    {"field_name": "email", "pii_category": "email", "declared_purpose": "receipts", "consent_scope": "service_delivery", "retention_days": 180, "source_system": "order-service"},
+    {"field_name": "phone", "pii_category": "phone", "declared_purpose": "support_callbacks", "consent_scope": "service_delivery", "retention_days": 90, "source_system": "support-ticketing"},
+    {"field_name": "email", "pii_category": "email", "declared_purpose": "newsletter", "consent_scope": "marketing", "retention_days": 90, "source_system": "marketing-service"},
+    {"field_name": "aadhaar", "pii_category": "aadhaar", "declared_purpose": "kyc", "consent_scope": "kyc", "retention_days": 365, "source_system": "kyc-service"},
+    {"field_name": "phone", "pii_category": "phone", "declared_purpose": "none", "consent_scope": "service_delivery", "retention_days": 30, "source_system": "noisy-service"}
+  ],
+  "owners": {
+    "order-service":     {"team": "Orders",    "email": "orders@demo.example",    "slack_channel": "#orders-oncall"},
+    "support-ticketing": {"team": "Support",   "email": "support@demo.example",   "slack_channel": "#support"},
+    "marketing-service": {"team": "Marketing", "email": "marketing@demo.example", "slack_channel": "#marketing-tech"},
+    "kyc-service":       {"team": "Risk",      "email": "risk@demo.example"},
+    "noisy-service":     {"team": "Platform",  "email": "platform@demo.example",  "slack_channel": "#platform"}
+  }
+}

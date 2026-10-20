@@ -16,6 +16,12 @@ VERITAS_ANCHOR_CONFIG) holds the settings, exactly as in docs/ANCHORING.md:
           host: siem.internal
           port: 6514
           protocol: tcp-tls
+        - type: email
+          to: audit@example.org
+        - type: tsa
+          url: https://tsa.example.org/ts
+        - type: pdf-digest
+          path: /mnt/audit-archive/veritas-digests
 
 For a quick start, VERITAS_ANCHOR_DIR=/some/folder switches anchoring on with one file witness and nothing else.
 """

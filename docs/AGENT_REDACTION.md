@@ -47,7 +47,7 @@ Every heartbeat reports the agent's mode per kind, whether it is fail-closed, wh
 - **Regular expressions miss things.** Names, free-form addresses and unusual formats get through. Use it as one layer, not as the only one.
 - **The server sees less.** With masking on, the server cannot run its name detection on the masked parts and cannot check a number's checksum again. With `drop`, the server never learns that line existed except from the agent's counts.
 - **Card numbers** found by the agent are reported as a kind of data; the policy does not yet rate their sensitivity, so such findings carry the lowest severity.
-- **Cost:** about 0.1 ms per ordinary line (a test fails above 1.5 ms); a very long line costs more, which is why there is a size limit.
+- **Cost:** about 0.01 ms per ordinary line (a test fails above 1.5 ms; `docs/PERFORMANCE.md`); a very long line costs more, which is why there is a size limit.
 
 ## Settings that are rejected at start
 
