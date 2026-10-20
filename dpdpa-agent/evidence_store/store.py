@@ -117,6 +117,7 @@ from db_encryption import decrypt_field, encrypt_field
 from evidence_store import canonical as cn
 from evidence_store import flows as flows_mod
 from evidence_store import incidents as inc
+from subject_lookup import index as subject_index, keys as subject_keys, rights as subject_rights
 from llm_explainer.explainer import ExplainedVerdict
 from schemas.models import RemediationStatus
 
@@ -226,6 +227,8 @@ class EvidenceStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._init_schema()
         self.flows = flows_mod.FlowCounter(self)
+        self.keyring = subject_keys.KeyRing(self)
+        self.subjects = subject_index.SubjectIndex(self)
 
     def _init_schema(self) -> None:
         with self._lock:
@@ -248,6 +251,9 @@ class EvidenceStore:
             self._migrate_add_case_tables()
             inc.create_tables(self._conn)
             flows_mod.create_tables(self._conn)
+            subject_keys.create_tables(self._conn)
+            subject_index.create_tables(self._conn)
+            subject_rights.create_tables(self._conn)
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_verdict_id ON evidence(verdict_id)"
             )
@@ -630,6 +636,7 @@ class EvidenceStore:
         status = {}           # verdict_id -> replayed status
         cached = {}           # verdict_id -> (cached status, index)
         incident_status = {}  # incident_id -> replayed status
+        rights_state = {}     # request_id -> replayed {status, tasks}
         for i, row in enumerate(rows):
             plaintext_json = decrypt_field(row["payload_json"])
             signed = json.loads(plaintext_json)
@@ -673,6 +680,9 @@ class EvidenceStore:
             elif rtype == cn.INCIDENT_EVENT:
                 if row["hash_version"] != 1 or not inc.verify_event(signed, incident_status):
                     return bad(i, "EVENT_INVALID", row["row_index"])
+            elif rtype == cn.RIGHTS_EVENT:
+                if row["hash_version"] != 1 or not subject_rights.verify_event(signed, rights_state):
+                    return bad(i, "EVENT_INVALID", row["row_index"])
             else:
                 return bad(i, "EVENT_INVALID", row["row_index"])
             expected_previous = row["row_hash"]
@@ -683,6 +693,13 @@ class EvidenceStore:
         for r in self._conn.execute("SELECT incident_id, status FROM incidents WHERE tenant_id = ?", (tenant_id,)):
             if incident_status.get(r["incident_id"], "OPEN") != r["status"]:
                 return bad(len(rows) - 1, "STATUS_CACHE_MISMATCH", rows[-1]["row_index"])
+        for r in self._conn.execute("SELECT request_id, status FROM rights_requests WHERE org = ?", (tenant_id,)):
+            replayed = rights_state.get(r["request_id"])
+            if replayed is None or replayed["status"] != r["status"]:
+                return bad(len(rows) - 1, "STATUS_CACHE_MISMATCH", rows[-1]["row_index"])
+            for t in self._conn.execute("SELECT system, status FROM request_tasks WHERE request_id = ?", (r["request_id"],)):
+                if (replayed["tasks"] or {}).get(t["system"]) is not (t["status"] == "CONFIRMED"):
+                    return bad(len(rows) - 1, "STATUS_CACHE_MISMATCH", rows[-1]["row_index"])
         return {"valid": True, "first_broken_index": None, "reason": None, "records": len(rows),
                 "head_hash": expected_previous if rows else None}
 
@@ -976,10 +993,11 @@ class EvidenceStore:
 
     def close(self) -> None:
         """Close the SQLite connection (the pending flow counts are written first)."""
-        try:
-            self.flows.flush()
-        except Exception:
-            logger.debug("flow counts not written at close", exc_info=True)
+        for pending in (self.flows, self.subjects):
+            try:
+                pending.flush()
+            except Exception:
+                logger.debug("pending counts not written at close", exc_info=True)
         self._conn.close()
 
 

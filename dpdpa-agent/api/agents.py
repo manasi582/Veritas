@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from agent_store.models import Agent, AgentStatus
 from agent_store.store import get_agent_store
+from evidence_store.store import get_store
 from api.agent_auth import verify_agent_token
 from api.auth_deps import can_access_org as _can_access_org, get_current_user, require_roles
 from config_loader import OrgConfigNotFoundError, load_org_config
@@ -139,6 +140,7 @@ class RegisterAgentResponse(BaseModel):
     event_endpoint: str
     server_version: str = ""          # lets the agent notice a version mismatch
     min_agent_version: str = ""
+    redaction_key: Optional[Dict[str, str]] = None   # {key_id, key}: the organization's key for hash mode (use TLS)
 
 
 class SourceHealth(BaseModel):
@@ -163,6 +165,7 @@ class RedactionHealth(BaseModel):
     max_line_chars: int = Field(0, ge=0)
     pack_version: str = Field("", max_length=32)
     pack_fingerprint: str = Field("", max_length=32)
+    hash_key_id: str = Field("", max_length=16)      # the id of the key the agent hashes with (never the key)
     redacted: Dict[str, int] = Field(default_factory=dict)      # values masked or hashed, by kind
     dropped: Dict[str, int] = Field(default_factory=dict)       # lines not sent because of this kind
 
@@ -409,6 +412,7 @@ async def register_agent(
         event_endpoint=f"/v1/{agent.org_id}/events",
         server_version=get_version(),
         min_agent_version=MIN_AGENT_VERSION,
+        redaction_key=get_store().keyring.agent_key_payload(agent.org_id),
     )
 
 
@@ -448,7 +452,14 @@ async def agent_heartbeat(
         health=req.health.model_dump() if req.health is not None else None,
     )
     reported = req.health.agent_version if req.health is not None else ""
+    answer_key = {}
+    red = req.health.redaction if req.health is not None else None
+    if red is not None and red.mode in ("hash", "mixed"):      # only an agent that hashes needs the key
+        current = get_store().keyring.agent_key_payload(agent.org_id)
+        if red.hash_key_id != current["key_id"]:
+            answer_key = {"redaction_key": current}
     return {
+        **answer_key,
         "ok": True,
         "agent_id": agent.agent_id,
         "server_version": get_version(),

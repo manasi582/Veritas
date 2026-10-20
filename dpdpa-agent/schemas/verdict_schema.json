@@ -38,7 +38,7 @@
     "rule_id": {
       "type": "string",
       "description": "The DPDPA compliance rule that was violated. IMMUTABLE. (LINKAGE_001 is planned for Phase 3.)",
-      "enum": ["EXPOSURE_001", "PURPOSE_001", "RETENTION_001"]
+      "enum": ["EXPOSURE_001", "PURPOSE_001", "RETENTION_001", "LINKAGE_001", "ERASURE_001"]
     },
     "severity": {
       "type": "string",

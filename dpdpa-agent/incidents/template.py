@@ -34,7 +34,7 @@ _SUBS = [
     (re.compile(r"\b(?:0x[0-9a-fA-F]{8,}|(?=[0-9]*[a-fA-F])[0-9a-fA-F]{8,})\b"), " <HEX> "),
     (re.compile(r"\b\d+(?:[.,:]\d+)*\b"), " <N> "),
 ]
-_PLACEHOLDER = re.compile(r"\[([A-Z0-9_]+?)(?:_REDACTED|#[0-9a-f]{16})\]")
+_PLACEHOLDER = re.compile(r"\[([A-Z0-9_]+?)(?:_REDACTED|#[0-9a-f]{6}\.[0-9a-f]{16})\]")
 _TOKEN = re.compile(r"<[A-Z*][A-Za-z:_*]*>|[A-Za-z][A-Za-z0-9_.\-/]*|\S")
 _WORD = re.compile(r"[a-z][a-z_\-]{0,24}")
 

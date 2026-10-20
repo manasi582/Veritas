@@ -126,10 +126,18 @@ def _build_fallback(verdict: Verdict, rule_id: str) -> ExplainedVerdict:
     """
     snippet = _STATUTE_SNIPPETS.get(rule_id, {})
     section = snippet.get("reference", rule_id)
-    explanation = (
-        f"Violation: {rule_id} — {verdict.field!r} exposed "
-        f"in {verdict.source_system}. See {section}."
-    )
+    if rule_id == "ERASURE_001":
+        explanation = (
+            f"An identifier for which an erasure request was closed (request {str((verdict.matched_registry_entry or {}).get('erasure_request', ''))[:8] or '?'}) "
+            f"was observed again in {verdict.source_system}. Veritas reports where it observed the identifier; it cannot "
+            f"tell whether the data was collected again, a copy was not erased, or the identifier now belongs to "
+            f"someone else. See {section}."
+        )
+    else:
+        explanation = (
+            f"Violation: {rule_id} — {verdict.field!r} exposed "
+            f"in {verdict.source_system}. See {section}."
+        )
     return ExplainedVerdict(
         verdict=verdict,
         explanation=explanation,

@@ -35,7 +35,8 @@ VERDICT = "VERDICT"
 STATUS_CHANGE = "STATUS_CHANGE"
 COMMENT = "COMMENT"
 INCIDENT_EVENT = "INCIDENT_EVENT"
-RECORD_TYPES = (VERDICT, STATUS_CHANGE, COMMENT, INCIDENT_EVENT)
+RIGHTS_EVENT = "RIGHTS_EVENT"
+RECORD_TYPES = (VERDICT, STATUS_CHANGE, COMMENT, INCIDENT_EVENT, RIGHTS_EVENT)
 
 
 # --------------------------------------------------------------------------- canonical JSON
@@ -142,6 +143,18 @@ def incident_event_body(org: str, seq: int, event_id: str, incident_id: str, act
     return {"type": INCIDENT_EVENT, "org": org, "seq": seq, "event_id": event_id, "incident_id": incident_id,
             "action": action, "old_status": old, "new_status": new, "actor": actor, "reason": reason or None,
             "other_id": other_id, "moved": moved, "at": rfc3339_ms(at)}
+
+
+def rights_event_body(org: str, seq: int, event_id: str, request_id: str, action: str, actor: str, at: datetime,
+                      request_type: Optional[str] = None, systems: Optional[list] = None, system: Optional[str] = None,
+                      identifiers: Optional[int] = None, reason: Optional[str] = None) -> Dict[str, Any]:
+    """
+    A step in a rights request: CREATED, TASKS_CREATED (one task per system in `systems`), TASK_CONFIRMED (`system`)
+    or CLOSED. No identifier and no requester reference is in the record, only the request id and counts.
+    """
+    return {"type": RIGHTS_EVENT, "org": org, "seq": seq, "event_id": event_id, "request_id": request_id,
+            "action": action, "actor": actor, "request_type": request_type, "systems": systems, "system": system,
+            "identifiers": identifiers, "reason": reason or None, "at": rfc3339_ms(at)}
 
 
 def legacy_view(body: Dict[str, Any]) -> Dict[str, Any]:

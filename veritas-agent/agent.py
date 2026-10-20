@@ -336,10 +336,8 @@ def validate_redaction(section: Any) -> List[str]:
         problems.append("redaction.max_line_chars must be a whole number from 1024 to 1000000")
     if not isinstance(section.get("fail_closed", True), bool):
         problems.append("redaction.fail_closed must be true or false")
-    if "hash" in modes:
-        key = str(section.get("hash_key") or "")
-        if len(key) < 16:
-            problems.append("redaction: mode hash needs hash_key of 16 or more characters (for example hash_key: ${VERITAS_HASH_KEY})")
+    if "hash" in modes and section.get("hash_key") and len(str(section.get("hash_key"))) < 16:
+        problems.append("redaction.hash_key must be 16 or more characters (or leave it out to use the key the server delivers)")
     if section.get("tee_file") and not (modes - {"monitor"}):
         problems.append("redaction.tee_file needs at least one kind set to mask, hash or drop (otherwise it would copy raw lines)")
     return problems
@@ -391,10 +389,26 @@ class Redactor:
         self.fail_closed = bool(section.get("fail_closed", True))
         # without a redaction section nothing is cut: lines go as they always did
         self.max_chars = int(section.get("max_line_chars", DEFAULT_MAX_LINE_CHARS)) if section else 10 ** 12
-        self.key = str(section.get("hash_key") or "").encode("utf-8")
+        configured = str(section.get("hash_key") or "")
+        self.key_pinned = bool(configured)           # a key in the file wins over the one the server delivers
+        self.key = configured.encode("utf-8")
+        self.key_id = vr.key_id_of(self.key) if (vr and self.key) else ""
         self.tee = tee
         self.active = any(m != "monitor" for m in self.modes.values())
         self._entities = [e for e, l in (vr.LABELS.items() if vr else []) if self.modes.get(l.lower(), "monitor") != "monitor"]
+
+    def set_delivered_key(self, key_id: str, key_hex: str) -> bool:
+        """Use the key the server delivered (unless the configuration pins one). True if it changed."""
+        if self.key_pinned or not vr:
+            return False
+        try:
+            key = bytes.fromhex(key_hex)
+        except ValueError:
+            return False
+        if len(key) < 16 or vr.key_id_of(key) != key_id or key == self.key:
+            return False
+        self.key, self.key_id = key, key_id
+        return True
 
     @property
     def overall_mode(self) -> str:
@@ -407,6 +421,7 @@ class Redactor:
             "mode": self.overall_mode, "categories": dict(self.modes), "fail_closed": self.fail_closed,
             "tee": self.tee is not None, "max_line_chars": self.max_chars,
             "pack_version": vr.PACK_VERSION if vr else "", "pack_fingerprint": vr.pack_fingerprint() if vr else "",
+            "hash_key_id": self.key_id,
         }
 
     def process(self, line: str):
@@ -436,6 +451,8 @@ class Redactor:
             if mode == "drop":
                 return None, {label.lower(): 1}, truncated
             out.append(text[pos:start])
+            if mode == "hash" and not self.key:
+                raise RuntimeError("hash mode has no key yet (the server delivers it at registration)")
             out.append(vr.hash_token(label, text[start:end], self.key) if mode == "hash" else vr.placeholder(label))
             counts[label.lower()] = counts.get(label.lower(), 0) + 1
             pos = end
@@ -710,6 +727,9 @@ def bootstrap(config: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
                 "event_endpoint": data["event_endpoint"],
                 "tls_verify":     str(verify),   # persist for future calls
             })
+            if isinstance(data.get("redaction_key"), dict):      # the organization's key for hash mode
+                state["redaction_key"] = {"key_id": str(data["redaction_key"].get("key_id", "")),
+                                          "key": str(data["redaction_key"].get("key", ""))}
             try:
                 save_state(state)
             except OSError as e:
@@ -1619,7 +1639,13 @@ def heartbeat_loop(
             if resp.ok:
                 logger.debug("Heartbeat sent OK")
                 try:
-                    note_server_versions(resp.json())
+                    answer = resp.json()
+                    note_server_versions(answer)
+                    new_key = answer.get("redaction_key") if isinstance(answer, dict) else None
+                    if isinstance(new_key, dict) and REDACTOR.set_delivered_key(str(new_key.get("key_id", "")), str(new_key.get("key", ""))):
+                        state["redaction_key"] = {"key_id": str(new_key["key_id"]), "key": str(new_key["key"])}
+                        save_state(state)
+                        logger.info("Received a new redaction key (%s) from the server", new_key["key_id"])
                 except Exception:
                     pass   # an answer without JSON (an older server) is fine
             else:
@@ -1654,6 +1680,8 @@ def main() -> None:
     if red:
         tee = MaskedTee(red["tee_file"], int(red.get("tee_max_bytes", DEFAULT_TEE_MAX_BYTES))) if red.get("tee_file") else None
         REDACTOR = Redactor(red, tee)
+        saved = state.get("redaction_key") or {}
+        REDACTOR.set_delivered_key(str(saved.get("key_id", "")), str(saved.get("key", "")))
         logger.info("Redaction: %s%s%s (recognizer pack %s)", REDACTOR.overall_mode,
                     ", fail-closed" if REDACTOR.fail_closed and REDACTOR.active else "",
                     f", masked copy in {red['tee_file']}" if tee else "", vr.PACK_VERSION)

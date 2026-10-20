@@ -86,7 +86,7 @@ def test_a_hashed_identifier_is_one_incident_template_but_distinct_findings(no_d
              agent_detections={"phone": 1})
     assert get_store().incident_summary(ORG)["incidents"] == 1
     assert get_store().incident_summary(ORG)["verdicts"] == 3
-    assert template_of("callback to [PHONE#0123456789abcdef] failed").text == template_of("callback to [PHONE_REDACTED] failed").text
+    assert template_of("callback to [PHONE#a1b2c3.0123456789abcdef] failed").text == template_of("callback to [PHONE_REDACTED] failed").text
 
 
 def test_schema_1_events_are_unchanged(no_detection):

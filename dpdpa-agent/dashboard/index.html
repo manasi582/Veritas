@@ -1529,6 +1529,9 @@
       <div class="nav-item" id="nav-flows" onclick="showTab('flows')">
         <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="12" r="2.5"/><path d="M7.5 6.8 16.6 11M7.5 17.2 16.6 13"/></svg></span> Data map
       </div>
+      <div class="nav-item" id="nav-requests" onclick="showTab('requests')" data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN,AUDITOR">
+        <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg></span> Rights requests
+      </div>
       <div class="nav-item" id="nav-agents" onclick="showTab('agents')">
         <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span> Agents
       </div>
@@ -2079,6 +2082,26 @@
         </div>
       </main>
 
+      <!-- ====== RIGHTS REQUESTS TAB ====== -->
+      <main class="page-section" id="main-requests">
+        <div class="section-header">
+          <h2>Lookup and rights requests</h2>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary" onclick="loadRequests()" style="font-size:0.78rem;">Refresh</button>
+            <button class="btn btn-secondary" onclick="openLookupModal()" style="font-size:0.78rem;" data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN">Look up an identifier</button>
+            <button class="btn btn-primary" onclick="openRequestModal()" style="font-size:0.78rem;" data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN">New request</button>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">Veritas reports where it <b>observed</b> an identifier in the logs it received. It does not store the identifier, and a closed request is not a certificate that data was erased everywhere. <span id="reqDeadlineNote"></span></p>
+        <div class="table-container"><div class="table-wrap">
+          <table id="reqTable">
+            <thead><tr><th>Reference</th><th>Type</th><th>Status</th><th>Received</th><th>Due</th><th>Systems</th><th>Action</th></tr></thead>
+            <tbody id="reqTbody"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading…</td></tr></tbody>
+          </table>
+        </div></div>
+        <div class="table-container" id="reqDetail" style="display:none;padding:14px;margin-top:14px;"></div>
+      </main>
+
       <!-- ====== AGENTS TAB ====== -->
       <main class="page-section" id="main-agents">
 
@@ -2158,6 +2181,39 @@
 
     </div>
   </div>
+</div>
+
+<!-- ====== LOOKUP MODAL ====== -->
+<div class="modal-overlay" id="lookupOverlay" onclick="closeLookupModal()"></div>
+<div class="modal" id="lookupModal">
+  <div class="modal-close" onclick="closeLookupModal()">✕</div>
+  <h3>Where was this identifier observed?</h3>
+  <div class="modal-sub">The identifier is checked in memory and is not stored. Each lookup is recorded in the audit log with a short token prefix, not the identifier.</div>
+  <div style="display:grid;grid-template-columns:1fr 2fr;gap:0.6rem;margin:1rem 0;font-size:0.85rem;">
+    <label>Kind<br><select id="lookupCategory" style="width:100%;"><option>phone</option><option>email</option><option>aadhaar</option><option>pan</option><option>card</option></select></label>
+    <label>Identifier<br><input type="text" id="lookupIdentifier" autocomplete="off" spellcheck="false" style="width:100%;" onkeydown="if(event.key==='Enter')runLookup()"></label>
+  </div>
+  <button class="btn btn-primary" onclick="runLookup()">Look up</button>
+  <div id="lookupResult" style="margin-top:1rem;font-size:0.85rem;"></div>
+</div>
+
+<!-- ====== NEW REQUEST MODAL ====== -->
+<div class="modal-overlay" id="requestOverlay" onclick="closeRequestModal()"></div>
+<div class="modal" id="requestModal">
+  <div class="modal-close" onclick="closeRequestModal()">✕</div>
+  <h3>New rights request</h3>
+  <div class="modal-sub">Veritas looks the identifier up, makes one task per system that was observed holding it, and records each step in the evidence chain. Use an opaque reference such as a ticket number, not a name.</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin:1rem 0;font-size:0.85rem;">
+    <label>Type<br><select id="reqType" style="width:100%;"><option value="erasure">erasure</option><option value="access">access</option><option value="correction">correction</option></select></label>
+    <label>Reference (ticket number)<br><input type="text" id="reqRef" maxlength="100" autocomplete="off" style="width:100%;"></label>
+    <label>Received<br><input type="date" id="reqReceived" style="width:100%;"></label>
+    <label>Due (optional)<br><input type="date" id="reqDue" style="width:100%;"></label>
+  </div>
+  <div style="font-size:0.85rem;margin-bottom:0.4rem;">Identifiers</div>
+  <div id="reqIdentifiers"></div>
+  <button class="btn btn-secondary" style="font-size:0.75rem;margin:0.4rem 0 1rem;" onclick="addRequestIdentifier()">Add another</button>
+  <div class="form-error-box" id="reqError" style="display:none;"></div>
+  <div><button class="btn btn-primary" onclick="submitRequest()">Create request</button></div>
 </div>
 
 <!-- ====== ISSUE KEY MODAL ====== -->
@@ -2526,11 +2582,13 @@ function showTab(name) {
     'users':     'Users',
     'simulate':  'Scan Sandbox',
     'flows':     'Data map',
+    'requests':  'Rights requests',
   };
   document.getElementById('pageTitle').innerText = titleMap[name] || name;
 
   if (name === 'audit')    { loadAuditTable(); refreshStats(); }
   if (name === 'flows')    { loadFlows(); }
+  if (name === 'requests') { loadRequests(); }
   if (name === 'overview') { refreshOverview(); refreshHealth(); }
   if (name === 'agents')   { loadAgents(); }
   if (name === 'auditlog') { loadAuditLog(); }
@@ -3110,6 +3168,168 @@ async function downloadFlowsPDF() {
     headStyles: { fillColor: [30, 30, 30] },
   });
   doc.save(`record-of-observed-processing-${currentOrgId}.pdf`);
+}
+
+
+// ---- Lookup and rights requests ----
+function setHidden(id, hidden) { const e = document.getElementById(id); if (e) e.classList.toggle('open', !hidden); }
+
+function openLookupModal() {
+  document.getElementById('lookupResult').textContent = '';
+  document.getElementById('lookupIdentifier').value = '';
+  setHidden('lookupOverlay', false); setHidden('lookupModal', false);
+  document.getElementById('lookupIdentifier').focus();
+}
+function closeLookupModal() {
+  document.getElementById('lookupIdentifier').value = '';       // never leave an identifier in the page
+  setHidden('lookupOverlay', true); setHidden('lookupModal', true);
+}
+
+async function runLookup() {
+  const input = document.getElementById('lookupIdentifier');
+  const out = document.getElementById('lookupResult');
+  const body = JSON.stringify({ category: document.getElementById('lookupCategory').value, identifier: input.value });
+  input.value = '';
+  out.textContent = 'Looking up…';
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/subjects/lookup`, {
+      method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body });
+    const d = await r.json();
+    if (!r.ok) { out.textContent = d.detail || 'Lookup failed'; return; }
+    if (!d.systems.length) { out.textContent = 'Not observed in any system (in the logs Veritas received).'; return; }
+    out.innerHTML = '<table style="width:100%;border-collapse:collapse;"><tr style="text-align:left;color:var(--text-muted)"><th>System</th><th>Events</th><th>First seen</th><th>Last seen</th></tr>' +
+      d.systems.map(s => `<tr><td>${escapeHtml(s.system)}</td><td class="mono">${Number(s.events)}</td><td>${escapeHtml(new Date(s.first_seen).toLocaleString())}</td><td>${escapeHtml(new Date(s.last_seen).toLocaleString())}</td></tr>`).join('') +
+      `</table><div class="inc-hint" style="margin-top:6px;">${escapeHtml(d.note)} Token prefix ${escapeHtml(d.token_prefix)}.</div>`;
+  } catch (e) { out.textContent = 'Network error'; }
+}
+
+let requestRows = [];
+
+async function loadRequests() {
+  if (!currentOrgId) return;
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/requests`, { credentials: 'include' });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    requestRows = d.requests || [];
+    document.getElementById('reqDeadlineNote').textContent = d.response_days_configured
+      ? `Due dates default to ${d.response_days_configured} days after receipt (set by your administrator; confirm the current DPDPA period).`
+      : 'No response period is configured: enter a due date when you create a request, after confirming the current DPDPA period.';
+    renderRequests();
+  } catch (e) { showToast('Failed to load requests', 'error'); }
+}
+
+function renderRequests() {
+  const tbody = document.getElementById('reqTbody');
+  if (!requestRows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem;">No requests yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = requestRows.map(q => {
+    const done = q.tasks.filter(t => t.status === 'CONFIRMED').length;
+    const due = q.due_at ? new Date(q.due_at).toLocaleDateString() : '—';
+    return `<tr>
+      <td class="mono">${escapeHtml(q.requester_ref)}</td><td>${escapeHtml(q.type)}</td>
+      <td><span class="status-badge ${q.status === 'CLOSED' ? 'RESOLVED' : 'OPEN'}">${escapeHtml(q.status)}</span>${q.overdue ? ' <span class="badge HIGH">overdue</span>' : ''}</td>
+      <td>${escapeHtml(new Date(q.received_at).toLocaleDateString())}</td><td>${escapeHtml(due)}</td>
+      <td>${done}/${q.tasks.length} confirmed</td>
+      <td><button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="openRequest('${safeId(q.request_id)}')">Open</button></td></tr>`;
+  }).join('');
+}
+
+async function openRequest(id) {
+  const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/requests/${id}`, { credentials: 'include' });
+  if (!r.ok) { showToast('Could not open the request', 'error'); return; }
+  const q = await r.json();
+  const box = document.getElementById('reqDetail');
+  const open = q.status === 'OPEN';
+  const tasks = q.tasks.length ? q.tasks.map(t => `<tr>
+      <td>${escapeHtml(t.system)}</td><td class="inc-hint">${escapeHtml(t.owner)}</td>
+      <td><span class="status-badge ${t.status === 'CONFIRMED' ? 'RESOLVED' : 'OPEN'}">${escapeHtml(t.status)}</span></td>
+      <td class="inc-hint">${t.confirmed_by ? escapeHtml(t.confirmed_by) + ' · ' + escapeHtml(new Date(t.confirmed_at).toLocaleString()) : ''}</td>
+      <td>${open && t.status === 'OPEN' ? `<span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN"><button class="btn btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="confirmRequestTask('${safeId(q.request_id)}','${encodeURIComponent(t.system)}')">Confirm</button></span>` : ''}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="inc-hint">No system was observed to hold the identifier, so there are no tasks.</td></tr>';
+  const found = q.lookup.map(x => `${escapeHtml(x.category)}: ${x.systems.length ? x.systems.map(s => escapeHtml(s.system) + ' (' + Number(s.events) + ')').join(', ') : 'not observed'}`).join('<br>');
+  box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <h3 style="margin:0;">${escapeHtml(q.type)} request ${escapeHtml(q.requester_ref)} <span class="status-badge ${open ? 'OPEN' : 'RESOLVED'}">${escapeHtml(q.status)}</span></h3>
+      <div style="display:flex;gap:6px;">
+        ${open ? `<span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN"><button class="btn btn-secondary" style="font-size:11px;" onclick="closeRequestNow('${safeId(q.request_id)}')">Close request</button></span>` : ''}
+        <button class="btn btn-secondary" style="font-size:11px;" onclick="downloadRecord('${safeId(q.request_id)}','pdf')">Record (PDF)</button>
+        <button class="btn btn-secondary" style="font-size:11px;" onclick="downloadRecord('${safeId(q.request_id)}','json')">Record (signed JSON)</button>
+      </div></div>
+    <div class="inc-hint" style="margin:8px 0;">Observed at lookup: <br>${found}</div>
+    <table style="width:100%;font-size:12px;border-collapse:collapse;"><tr style="text-align:left;color:var(--text-muted)"><th>System</th><th>Owner</th><th>Task</th><th>Confirmed</th><th></th></tr>${tasks}</table>
+    <div class="inc-hint" style="margin-top:8px;">Chain entries: ${q.events.map(e => escapeHtml(e.action) + ' #' + Number(e.seq)).join(' · ')}${q.watching ? ' · watching for the identifier to reappear (ERASURE_001)' : ''}</div>`;
+  box.style.display = '';
+  if (window.__veritasRole) applyRoleUI(window.__veritasRole);
+}
+
+async function confirmRequestTask(id, systemEnc) {
+  const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/requests/${id}/tasks/${systemEnc}/confirm`, {
+    method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: '{}' });
+  if (!r.ok) { showToast((await r.json()).detail || 'Could not confirm', 'error'); return; }
+  showToast('Task confirmed', 'success');
+  await loadRequests(); openRequest(id);
+}
+
+async function closeRequestNow(id) {
+  const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/requests/${id}/close`, {
+    method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: '{}' });
+  if (!r.ok) { showToast((await r.json()).detail || 'Could not close', 'error'); return; }
+  showToast('Request closed', 'success');
+  await loadRequests(); openRequest(id);
+}
+
+async function downloadRecord(id, kind) {
+  const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/requests/${id}/record.${kind}`, { credentials: 'include' });
+  if (!r.ok) { showToast('Could not create the record', 'error'); return; }
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement('a');
+  a.href = url; a.download = `rights-record-${id.slice(0, 8)}.${kind}`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+function addRequestIdentifier() {
+  const rows = document.getElementById('reqIdentifiers');
+  if (rows.children.length >= 5) return;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 2fr;gap:0.6rem;margin-bottom:0.4rem;';
+  div.innerHTML = '<select class="req-cat" style="width:100%;"><option>phone</option><option>email</option><option>aadhaar</option><option>pan</option><option>card</option></select>' +
+                  '<input type="text" class="req-id" autocomplete="off" spellcheck="false" style="width:100%;">';
+  rows.appendChild(div);
+}
+
+function openRequestModal() {
+  document.getElementById('reqRef').value = '';
+  document.getElementById('reqDue').value = '';
+  document.getElementById('reqReceived').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('reqIdentifiers').replaceChildren();
+  document.getElementById('reqError').style.display = 'none';
+  addRequestIdentifier();
+  setHidden('requestOverlay', false); setHidden('requestModal', false);
+}
+function closeRequestModal() {
+  document.querySelectorAll('#reqIdentifiers .req-id').forEach(i => { i.value = ''; });   // never leave an identifier in the page
+  setHidden('requestOverlay', true); setHidden('requestModal', true);
+}
+
+async function submitRequest() {
+  const err = document.getElementById('reqError');
+  const ids = [...document.querySelectorAll('#reqIdentifiers > div')].map(d => ({
+    category: d.querySelector('.req-cat').value, identifier: d.querySelector('.req-id').value })).filter(x => x.identifier.trim());
+  const body = JSON.stringify({
+    type: document.getElementById('reqType').value, requester_ref: document.getElementById('reqRef').value,
+    received_at: document.getElementById('reqReceived').value || null, due_at: document.getElementById('reqDue').value || null, identifiers: ids });
+  document.querySelectorAll('#reqIdentifiers .req-id').forEach(i => { i.value = ''; });
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/requests`, {
+      method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = d.detail || 'Could not create the request'; err.style.display = ''; return; }
+    closeRequestModal();
+    showToast('Request created', 'success');
+    await loadRequests(); openRequest(d.request_id);
+  } catch (e) { err.textContent = 'Network error'; err.style.display = ''; }
 }
 
 // ---- Cryptographic Hash Chain Verification ----

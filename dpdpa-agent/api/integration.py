@@ -86,7 +86,7 @@ from org_config.store import (
 )
 from registry.loader import reload_org_config
 from rules.engine import evaluate_event
-from schemas.models import Event, RuleId, SourceType, Verdict
+from schemas.models import Event, RemediationStatus, RuleId, Severity, SourceType, Verdict
 
 logger = logging.getLogger("api.integration")
 
@@ -173,6 +173,19 @@ async def _process_event(event: Event, *, write_to_store: bool,
             logger.debug("flow count failed", exc_info=True)
 
     store = get_store() if write_to_store else None
+    tokens: list = []
+    if store is not None and (detected.matched_entities or "#" in event.raw_snippet):
+        try:   # keyed tokens of identifiers seen here (never the identifiers), and the erasure watch list
+            tokens = store.subjects.tokens_for_event(event.tenant_id, detected.matched_entities, event.raw_snippet)
+            for _kid, _tok, request_id in store.subjects.watch_hits(event.tenant_id, tokens)[:1]:
+                verdicts.append(Verdict(
+                    tenant_id=event.tenant_id, verdict_id=str(uuid4()), event_id=str(event.event_id),
+                    rule_id=RuleId.ERASURE_001, severity=Severity.HIGH, source=event.source_type,
+                    source_system=event.source_system, field="raw_snippet", timestamp=datetime.now(timezone.utc),
+                    matched_registry_entry={"erasure_request": request_id}, breach_notification_candidate=False,
+                    remediation_status=RemediationStatus.OPEN, remediation_updated_at=None))
+        except Exception:
+            logger.warning("identifier index failed for an event", exc_info=True)
     grouping = None
     if store is not None and verdicts:
         try:   # the line's template and root-cause hint, for grouping; a failure here only means "not grouped by wording"
@@ -211,6 +224,13 @@ async def _process_event(event: Event, *, write_to_store: bool,
                                   v.breach_notification_candidate, v.source_system)
         except Exception:
             logger.debug("alert hand-over failed", exc_info=True)
+
+    if tokens and store is not None:
+        try:
+            store.subjects.record(event.tenant_id, event.source_system, tokens,
+                                  [str(e.verdict.verdict_id) for e, stored, _ in explained_and_stored if stored])
+        except Exception:
+            logger.debug("identifier index write failed", exc_info=True)
 
     return {"detected": detected, "explained": explained_and_stored}
 

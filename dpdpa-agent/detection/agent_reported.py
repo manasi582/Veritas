@@ -17,7 +17,7 @@ from detection.models import MatchedEntity, PATTERN_MATCH
 
 LABEL_TO_ENTITY = {"aadhaar": "IN_AADHAAR", "pan": "IN_PAN", "phone": "IN_PHONE", "email": "EMAIL_ADDRESS",
                    "card": "CREDIT_CARD"}
-_FOUND = re.compile(r"\[([A-Z]+)(?:_REDACTED|#[0-9a-f]{16})\]")
+_FOUND = re.compile(r"\[([A-Z]+)(?:_REDACTED|#[0-9a-f]{6}\.[0-9a-f]{16})\]")
 FREE_TEXT_FIELD = "raw_snippet"
 
 

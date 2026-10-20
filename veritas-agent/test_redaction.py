@@ -48,7 +48,6 @@ def test_a_good_section_has_no_problems():
     ({"mode": "scramble"}, "redaction.mode"),
     ({"categories": {"passport": "mask"}}, "unknown kind"),
     ({"categories": {"phone": "shred"}}, "redaction.categories.phone"),
-    ({"mode": "hash"}, "hash_key"),
     ({"mode": "hash", "hash_key": "short"}, "hash_key"),
     ({"mode": "mask", "max_line_chars": 10}, "max_line_chars"),
     ({"mode": "mask", "fail_closed": "yes"}, "fail_closed"),
@@ -62,7 +61,7 @@ def test_bad_sections_are_explained(section, fragment):
 
 def test_the_config_file_is_checked_on_load(tmp_path):
     cfg = tmp_path / "c.yaml"
-    cfg.write_text("veritas_address: https://veritas.example.org:8000\nredaction:\n  mode: hash\n", encoding="utf-8")
+    cfg.write_text("veritas_address: https://veritas.example.org:8000\nredaction:\n  mode: hash\n  hash_key: short\n", encoding="utf-8")
     with pytest.raises(SystemExit) as e:
         agent.load_config(cfg)
     assert e.value.code == agent.EXIT_CONFIG
@@ -276,3 +275,36 @@ def test_a_spaced_value_split_by_the_limit_is_not_leaked(monkeypatch):
     use(monkeypatch, mode="mask", max_line_chars=2048)
     out, _ = agent.apply_redaction("b" * 2043 + " " + AADHAAR)           # the cut falls inside "2345 6789 0124"
     assert "2345" not in out and "6789" not in out and out.endswith("[TRUNCATED]")
+
+
+# ---- the key the server delivers ------------------------------------------------------------------------
+
+def test_hash_mode_uses_the_key_the_server_delivers(monkeypatch):
+    r = use(monkeypatch, mode="hash")
+    assert agent.validate_redaction({"mode": "hash"}) == []               # a key may arrive from the server
+    key = b"s" * 32
+    assert r.set_delivered_key(vr.key_id_of(key), key.hex()) is True
+    out, _ = agent.apply_redaction(f"call {PHONE}")
+    assert out == f"call {vr.hash_token('PHONE', PHONE, key)}" and vr.key_id_of(key) in out
+    assert agent.build_health(None)["redaction"]["hash_key_id"] == vr.key_id_of(key)
+
+
+def test_without_any_key_hash_mode_drops_the_line_not_sends_it(monkeypatch):
+    use(monkeypatch, mode="hash")
+    out, _ = agent.apply_redaction(f"call {PHONE}")
+    assert out is None and agent.STATS.snapshot()["dropped_redaction_error"] == 1
+
+
+def test_a_key_in_the_file_wins_over_a_delivered_one(monkeypatch):
+    r = use(monkeypatch, mode="hash", hash_key="f" * 32)
+    other = b"o" * 32
+    assert r.set_delivered_key(vr.key_id_of(other), other.hex()) is False
+    assert r.key_id == vr.key_id_of(b"f" * 32)
+
+
+def test_a_damaged_delivered_key_is_ignored(monkeypatch):
+    r = use(monkeypatch, mode="hash")
+    good = b"g" * 32
+    assert r.set_delivered_key("000000", good.hex()) is False          # the id does not match the key
+    assert r.set_delivered_key(vr.key_id_of(good), "zz") is False
+    assert r.key == b""

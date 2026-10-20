@@ -20,7 +20,7 @@ import hmac
 import re
 from typing import Dict, Iterable, List, NamedTuple, Optional, Tuple
 
-PACK_VERSION = "1.1.0"
+PACK_VERSION = "1.2.0"
 
 # --------------------------------------------------------------------------- entity types, labels, rules
 
@@ -196,11 +196,23 @@ def normalise_identifier(label: str, value: str) -> str:
     return value
 
 
-def hash_token(label: str, value: str, key: bytes) -> str:
-    """[PHONE#0123456789abcdef]: 16 hex characters of HMAC-SHA256(key, LABEL LF normalised value)."""
+def key_id_of(key: bytes) -> str:
+    """A short public name for a key (6 hex characters of a hash of it), carried in every token it makes."""
+    return hashlib.sha256(b"veritas-kid:" + key).hexdigest()[:6]
+
+
+def keyed_digest(label: str, value: str, key: bytes) -> str:
+    """Full HMAC-SHA256 (64 hex characters) of LABEL LF normalised value. The server's lookup index stores this."""
     label = label.upper()
-    material = (label + "\n" + normalise_identifier(label, value)).encode("utf-8")
-    return "[%s#%s]" % (label, hmac.new(key, material, hashlib.sha256).hexdigest()[:16])
+    return hmac.new(key, (label + "\n" + normalise_identifier(label, value)).encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def hash_token(label: str, value: str, key: bytes) -> str:
+    """[PHONE#a1b2c3.0123456789abcdef]: the key's id, then 16 hex characters of the keyed digest."""
+    return "[%s#%s.%s]" % (label.upper(), key_id_of(key), keyed_digest(label, value, key)[:16])
+
+
+TOKEN_PATTERN = r"\[([A-Z]+)#([0-9a-f]{6})\.([0-9a-f]{16})\]"
 
 
 def placeholder(label: str) -> str:

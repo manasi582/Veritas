@@ -66,6 +66,7 @@ There is no connection to the vendor. The product does not phone home, collect u
 
 - **Evidence integrity.** SHA-256 chain per organization; "Verify chain" in the dashboard; checked with every backup; a failure raises an alert.
 - **Health and alerts.** License, certificate and disk expiry, failed backups and broken chains raise alerts to a webhook or e-mail you configure; a Prometheus-format metrics endpoint is available, off until you set a token.
+- **Identifier lookup.** Veritas can answer where an identifier was observed without storing it: only keyed hashes are kept, the keys are encrypted at rest and never exported, every lookup is audited (with a token prefix, never the identifier), and lookups are limited to compliance administrators. Backups contain the keys.
 - **Logging.** Operational logs are private to the service account and rotate by size on macOS (Ubuntu uses the system journal). Logs do not contain personal data values; a log filter removes recognizable identifiers.
 
 ## 6. Software supply chain and release process
