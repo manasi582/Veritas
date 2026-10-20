@@ -154,6 +154,32 @@ def bench_schema(n=20000):
     return {"statements": n, "parse_us_per_statement": round(t / n * 1e6, 1)}
 
 
+def bench_policy_reviews(systems=50, fields=6):
+    from datetime import datetime, timedelta, timezone
+    from evidence_store.store import EvidenceStore
+    from notice_registry import coverage
+    from org_config.schema import OrgConfig
+    from retention_review import review
+    store = EvidenceStore(Path(tempfile.mkdtemp()) / "bench.db")
+    labels = ["aadhaar", "pan", "phone", "email", "card"]
+    cfg = OrgConfig.model_validate({"org_id": "bench", "fields": [
+        {"field_name": f"field{f}", "pii_category": labels[f % 5], "declared_purpose": "p", "consent_scope": "c", "retention_days": 90,
+         "source_system": f"system{s}"} for s in range(systems) for f in range(fields)],
+        "notices": [{"notice_id": "n1", "version": "1", "effective_from": "2026-01-01", "data_categories": labels[:3], "systems": ["*"]}]})
+    now = datetime.now(timezone.utc)
+    for s_ in range(systems):
+        for f in range(fields):
+            for c in labels:
+                store.flows.record("bench", f"system{s_}", [(f"field{f}", c)], f"d{f}.example.org", at=now - timedelta(days=f * 20))
+    store.flows.flush()
+    t_ret, out = timed(lambda: review.review(store, "bench", cfg))
+    t_not, cov = timed(lambda: coverage.review(store, "bench", cfg))
+    rows = store._conn.execute("SELECT COUNT(*) AS n FROM observed_flows").fetchone()["n"]
+    store.close()
+    return {"systems": systems, "declared_fields": systems * fields, "counter_rows": rows, "retention_review_s": round(t_ret, 3),
+            "notice_review_s": round(t_not, 3), "overdue": out["summary"]["overdue"], "observed_uncovered": cov["summary"]["observed_uncovered"]}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--verdicts", type=int, default=100_000)
@@ -162,12 +188,12 @@ def main():
     os.environ["VERITAS_DATA_DIR"] = tempfile.mkdtemp()
     result = {"machine": f"{platform.platform()} / Python {platform.python_version()} / {os.cpu_count()} cores",
               "incidents": bench_incidents(a.verdicts), "flows": bench_flows(), "lookup": bench_lookup(),
-              "redaction": bench_redaction(), "payload_tap": bench_tap(), "schema_watch": bench_schema()}
+              "redaction": bench_redaction(), "payload_tap": bench_tap(), "schema_watch": bench_schema(), "policy_reviews": bench_policy_reviews()}
     if a.json:
         print(json.dumps(result, indent=1))
         return
     print("Machine:", result["machine"])
-    for name in ("incidents", "flows", "lookup", "redaction", "payload_tap", "schema_watch"):
+    for name in ("incidents", "flows", "lookup", "redaction", "payload_tap", "schema_watch", "policy_reviews"):
         print(f"\n{name}")
         for k, v in result[name].items():
             print(f"  {k:36} {v}")

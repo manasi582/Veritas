@@ -13,6 +13,7 @@ Measured with `tools/bench_trust.py` (run it on your own hardware: `python tools
 | Recognizer pack | find and mask two values in a log line | 10 µs | |
 | Payload tap (Python, ASGI) | extra time per request with every request inspected and reported (worst case), a 3 KB body with 80 items | **0.30 ms at the median, 0.35 ms at the 99th percentile** | under 1 ms |
 | Schema watch | parse one DDL statement (an `ALTER TABLE` with two changes) | 10 µs | |
+| Retention review and notice coverage | review 50 systems, 300 declared fields, 1,500 counter rows | **19 ms** and **3 ms** | |
 | Agent redaction | the agent's whole path per line (scan, mask or hash, count, queue-ready) | mask 11 µs, hash 14 µs | under 1.5 ms (test) |
 
 ## What these mean

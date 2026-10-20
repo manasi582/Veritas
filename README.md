@@ -55,6 +55,7 @@ Step-by-step guides:
 | [docs/STREAMING_RECEIVERS.md](docs/STREAMING_RECEIVERS.md) | OpenTelemetry logs and syslog as ways in, besides files |
 | [docs/NOTICE_REGISTRY.md](docs/NOTICE_REGISTRY.md) | Which privacy notices cover the data declared and observed (coverage, not adequacy), with `NOTICE_001` |
 | [docs/RETENTION_REVIEW.md](docs/RETENTION_REVIEW.md) | Declared retention periods against what is still seen, with warnings and owner tasks (never deletes anything) |
+| [docs/PS_ALIGNMENT_STATUS.md](docs/PS_ALIGNMENT_STATUS.md) | Where the product stands against the problem statement, requirement by requirement, with the evidence |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Measured cost of these features |
 | [docs/legal/](docs/legal/README.md) | Drafts of the license agreement, support policy and data handling statement (for legal review) |
 

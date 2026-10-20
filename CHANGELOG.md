@@ -4,7 +4,7 @@ What changed in each release, in plain language. The newest release is first. Ev
 
 ## Unreleased (1.2.0)
 
-Work towards full alignment with the problem statement (`docs/PS_ALIGNMENT_PLAN.md`).
+Work towards full alignment with the problem statement (`docs/PS_ALIGNMENT_PLAN.md`; the score and the evidence are in `docs/PS_ALIGNMENT_STATUS.md`). The demo (`docs/DEMO.md`) has new moments for the schema change, the leaky API, retention and notices.
 
 - **Phase A, groundwork:** fields named by a path, as API payloads name them (`user.phone`, `items[0].mobile`), now match the declared field and its validator. Events can say how they arrived (`source_kind`: log, api, schema or otlp) and the data map records it. The rule id `NOTICE_001` is reserved for the notice check (Phase E). `scope.md` now says what is observed in telemetry and what is not.
 - **Phase B, Schema Watch:** the agent has a new `db_schema_log` source that keeps only whole `CREATE`, `ALTER` and `DROP TABLE` statements from a database log (everything else is dropped on the host). The server parses them (PostgreSQL and MySQL), guesses from each column's name whether it holds personal data, and compares that with the policy: a personal-data column the policy does not declare is a `PURPOSE_001` finding with an owner and an incident, and the Data map shows the kind of data and how it was seen. The policy can correct the guess (`schema_hints`). Statements that carry values are never stored. New API `GET /v1/{org}/schema`. See `docs/SCHEMA_WATCH.md`.

@@ -1,6 +1,6 @@
 # The demo: trust, visibility and prevention
 
-A 15-minute walk through five features in the order that tells the story. Each moment says what to do, what the screen shows, what to say, and what **not** to claim. The same story runs unattended in CI (`tools/trust_e2e.py`), so every step below is known to work.
+A 15 to 20 minute walk through five features in the order that tells the story. Each moment says what to do, what the screen shows, what to say, and what **not** to claim. The same story runs unattended in CI (`tools/trust_e2e.py`), so every step below is known to work.
 
 ## Before the meeting (20 minutes)
 
@@ -33,11 +33,24 @@ A 15-minute walk through five features in the order that tells the story. Each m
 - **Say:** "One debug statement used to mean twelve thousand rows for a person to wade through. It is a dozen problems at most, each with an owner. And if a fix does not hold, Veritas tells you."
 - **Do not say:** that the grouping is perfect. If asked: "A template that is too loose merges two problems; you can split and merge, and both are recorded."
 
+## 2b. Beyond logs: a database change and a leaky API (3 min)
+
+- **Do:** with the `db_schema_log` agent on the demo database (`docs/SCHEMA_WATCH.md`), run `ALTER TABLE customers ADD COLUMN aadhaar_no varchar(12);` in `psql`. Within seconds a finding appears in the Audit Ledger: *a database change adds a column that looks like Aadhaar data, and the policy does not declare it*, with the system's owner. Open the **Data map**: *Database schema changes* lists it as undeclared. Then call a demo API route whose response carries a phone number in a field the policy does not declare (a service wrapped with the payload tap, `docs/PAYLOAD_TAP.md`): a finding names the route's field (`user.phone`), and the data map shows it was seen in an API.
+- **Say:** "Logs are only one place personal data shows up. A new column, or an API response, is the same problem arriving a different way. The agent in the service masks it before anything leaves, so Veritas never sees the value."
+- **Do not say:** that it reads your database or your traffic. It reads the *structure* of schema changes in the database log, and only the traffic that passes through the library you install. It does not find names.
+- **Pipeline moment (optional, 30 s):** run `python veritas_gate.py openapi.json` on a spec whose example holds a real-looking number: it fails the build and prints the value masked.
+
 ## 3. The data map: who handles what, against the policy (2 min)
 
 - **Do:** *Data map*. Append `marketing-service.log` to the marketing agent's file (or POST the line): an e-mail address reaches a system whose policy declares only phone. The node turns **amber, then red** once the finding opens. Click it: what was observed, the owner, the open incident; *Open in the Audit Ledger*. Download **Record (PDF)**.
 - **Say:** "This is the observed processing map: what Veritas has seen, against what you declared."
 - **Do not say:** "complete data map". It shows what was observed in the logs received, not everything that exists (the page says so).
+
+## 3b. Retention and notices on the same map (1 min)
+
+- **Do:** on the **Data map** page, scroll to **Retention review**: one system is *overdue* (its declared period has run out and data of that kind is still being seen); click *Open task*. Then **Notice coverage**: the notice lists phone numbers only, and an e-mail address was observed, so it shows *observed, not covered*.
+- **Say:** "Your policy says how long data may be kept and which notice covers it. Veritas checks what it actually sees against that, and gives the owner a task."
+- **Do not say:** that it deletes anything, or that a notice is adequate. It tracks to a confirmed close, and it checks that a current notice you recorded covers the data. Whether the notice is legally adequate is a lawyer's question.
 
 ## 4. A rights request, from lookup to record (3 min)
 
