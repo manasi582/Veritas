@@ -130,7 +130,7 @@ def test_throughput_is_light_enough_for_an_agent():
 
 def test_the_pack_imports_only_the_standard_library():
     tree = ast.parse((ROOT / "dpdpa-agent" / "veritas_recognizers.py").read_text(encoding="utf-8"))
-    allowed = {"__future__", "hashlib", "re", "typing"}
+    allowed = {"__future__", "hashlib", "hmac", "re", "typing"}
     names = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
