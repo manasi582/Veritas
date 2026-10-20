@@ -199,6 +199,18 @@ def flow(browser, pages: list) -> None:
     page.click("#drawer .drawer-close, #drawer [onclick*='closeDrawer']")
     expect(page.locator("#auditTbody .status-badge.RESOLVED").first).to_be_visible()
 
+    step("the observed processing map shows the system, its open incident and exports the record")
+    page.click("#nav-flows")
+    node = page.locator("#flowSvg g.flow-node", has_text="kyc-service")
+    expect(node).to_be_visible()
+    expect(node).to_have_attribute("aria-label", "kyc-service: red")
+    node.click()
+    expect(page.locator("#flowPanel")).to_contain_text("Open incidents")
+    shot(page, "05b-data-map")
+    with page.expect_download() as dl:
+        page.click("#main-flows button:has-text('Record (CSV)')")
+    assert dl.value.suggested_filename.endswith(".csv")
+
     step("verify the cryptographic hash chain")
     page.click("button:has-text('Verify Cryptographic Hash Chain')")
     expect(page.locator("#integrityResult")).to_contain_text("chain intact")

@@ -575,6 +575,10 @@
       background: var(--btn-primary-hover);
     }
 
+    .flow-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:middle; }
+    .flow-node { cursor:pointer; }
+    .flow-node text { fill: var(--text-headings); font-size: 12px; }
+    .flow-node .sub { fill: var(--text-muted); font-size: 10.5px; }
     .view-switch { display: inline-flex; gap: 0; }
     .view-switch .btn { border-radius: 0; }
     .view-switch .btn:first-child { border-radius: 6px 0 0 6px; }
@@ -1522,6 +1526,9 @@
       <div class="nav-item" id="nav-audit" onclick="showTab('audit')">
         <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> Audit Ledger
       </div>
+      <div class="nav-item" id="nav-flows" onclick="showTab('flows')">
+        <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="12" r="2.5"/><path d="M7.5 6.8 16.6 11M7.5 17.2 16.6 13"/></svg></span> Data map
+      </div>
       <div class="nav-item" id="nav-agents" onclick="showTab('agents')">
         <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span> Agents
       </div>
@@ -1762,6 +1769,8 @@
                   <option value="">All</option><option value="HIGH">HIGH</option>
                   <option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option>
                 </select></div>
+              <div class="filter-item"><label>System</label>
+                <input type="text" id="i-system" placeholder="e.g. order-service" style="width:140px" onkeydown="if(event.key==='Enter')loadIncidents()" /></div>
               <div class="filter-item"><label>Recurred</label>
                 <select id="i-recurred" onchange="loadIncidents()"><option value="">Any</option><option value="1">Recurred only</option></select></div>
               <div class="filter-item"><button class="btn btn-secondary" onclick="loadIncidents()">Refresh</button></div>
@@ -2044,6 +2053,29 @@
               </div>
             </div>
           </div>
+        </div>
+      </main>
+
+      <!-- ====== DATA MAP TAB ====== -->
+      <main class="page-section" id="main-flows">
+        <div class="section-header">
+          <h2>Observed processing map</h2>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary" onclick="loadFlows()" style="font-size:0.78rem;">Refresh</button>
+            <button class="btn btn-secondary" onclick="downloadFlowsCSV()" style="font-size:0.78rem;">Record (CSV)</button>
+            <button class="btn btn-secondary" onclick="downloadFlowsPDF()" style="font-size:0.78rem;">Record (PDF)</button>
+          </div>
+        </div>
+        <p id="flowNote" style="font-size:12px;color:var(--text-muted);margin:0 0 10px;"></p>
+        <div style="display:flex;gap:14px;font-size:12px;margin-bottom:10px;flex-wrap:wrap;">
+          <span><span class="flow-dot" style="background:var(--low)"></span> everything observed is declared</span>
+          <span><span class="flow-dot" style="background:var(--medium)"></span> a kind of data observed that is not declared</span>
+          <span><span class="flow-dot" style="background:var(--high)"></span> an open incident</span>
+          <span><span class="flow-dot" style="background:var(--text-muted)"></span> declared, not observed</span>
+        </div>
+        <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+          <div class="table-container" style="flex:1 1 560px;min-width:320px;padding:8px;"><svg id="flowSvg" width="100%" height="320" role="img" aria-label="Systems and the kinds of personal data observed in them"></svg></div>
+          <div class="table-container" style="flex:0 1 380px;min-width:280px;padding:14px;" id="flowPanel"><div style="color:var(--text-muted);font-size:13px;">Select a system to see what was observed there.</div></div>
         </div>
       </main>
 
@@ -2462,6 +2494,9 @@ function activateOrg(orgId) {
   if (document.getElementById('main-audit').classList.contains('active')) {
     loadAuditTable();
   }
+  if (document.getElementById('main-flows').classList.contains('active')) {
+    loadFlows();
+  }
   if (document.getElementById('main-policy').classList.contains('active')) {
     loadPolicy();
   }
@@ -2489,10 +2524,12 @@ function showTab(name) {
     'auditlog':  'System Audit Log',
     'users':     'Users',
     'simulate':  'Scan Sandbox',
+    'flows':     'Data map',
   };
   document.getElementById('pageTitle').innerText = titleMap[name] || name;
 
   if (name === 'audit')    { loadAuditTable(); refreshStats(); }
+  if (name === 'flows')    { loadFlows(); }
   if (name === 'overview') { refreshOverview(); refreshHealth(); }
   if (name === 'agents')   { loadAgents(); }
   if (name === 'auditlog') { loadAuditLog(); }
@@ -2747,6 +2784,8 @@ async function loadIncidents() {
   const st = document.getElementById('i-status').value, sv = document.getElementById('i-severity').value;
   if (st) params.set('status', st);
   if (sv) params.set('severity', sv);
+  const sysFilter = document.getElementById('i-system').value.trim();
+  if (sysFilter) params.set('source_system', sysFilter);
   if (document.getElementById('i-recurred').value) params.set('recurred', 'true');
   try {
     const [r, sr] = await Promise.all([
@@ -2924,6 +2963,152 @@ async function updateStatus(verdictId, newStatus) {
   } catch(e) {
     showToast('Network error', 'error');
   }
+}
+
+
+// ---- Data map: observed processing ----
+let flowData = null;
+const FLOW_COLOR = { red: 'var(--high)', amber: 'var(--medium)', green: 'var(--low)', grey: 'var(--text-muted)' };
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+function svgEl(name, attrs, text) {
+  const e = document.createElementNS(SVGNS, name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+async function loadFlows() {
+  if (!currentOrgId) return;
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/flows`, { credentials: 'include' });
+    if (!r.ok) throw new Error(r.status);
+    flowData = await r.json();
+    document.getElementById('flowNote').textContent = flowData.note +
+      (flowData.observing_since ? ` Counting since ${new Date(flowData.observing_since).toLocaleString()}.` : ' Nothing has been counted yet.');
+    renderFlowMap();
+  } catch (e) {
+    showToast('Failed to load the data map', 'error');
+  }
+}
+
+function renderFlowMap() {
+  const svg = document.getElementById('flowSvg');
+  svg.replaceChildren();
+  if (!flowData || !flowData.nodes.length) {
+    svg.setAttribute('height', 80);
+    svg.appendChild(svgEl('text', { x: 16, y: 40, fill: 'currentColor', 'font-size': 13 }, 'No systems declared or observed yet.'));
+    return;
+  }
+  const W = Math.max(svg.clientWidth || 700, 520), rowH = 64, nodeW = 200, nodeH = 46, pad = 14;
+  const dests = [...new Set(flowData.edges.filter(e => e.kind === 'external').map(e => e.target))];
+  const rows = Math.max(flowData.nodes.length, dests.length);
+  svg.setAttribute('height', rows * rowH + pad * 2);
+  const pos = {};
+  flowData.nodes.forEach((n, i) => { pos[n.id] = { x: pad, y: pad + i * rowH }; });
+  const dpos = {};
+  dests.forEach((d, i) => { dpos[d] = { x: W - nodeW - pad, y: pad + i * rowH }; });
+  const g = svgEl('g', {});
+  svg.appendChild(g);
+  flowData.edges.forEach(e => {
+    const a = pos[e.source];
+    if (!a) return;
+    const width = (1 + Math.min(4, Math.log10(Math.max(1, e.count)))).toFixed(1);
+    let d;
+    if (e.kind === 'external') {
+      const b = dpos[e.target];
+      d = `M${a.x + nodeW},${a.y + nodeH / 2} C${a.x + nodeW + 120},${a.y + nodeH / 2} ${b.x - 120},${b.y + nodeH / 2} ${b.x},${b.y + nodeH / 2}`;
+    } else {
+      const b = pos[e.target];
+      if (!b || b === a) return;
+      d = `M${a.x + nodeW},${a.y + nodeH / 2} C${a.x + nodeW + 90},${a.y + nodeH / 2} ${b.x + nodeW + 90},${b.y + nodeH / 2} ${b.x + nodeW},${b.y + nodeH / 2}`;
+    }
+    const path = svgEl('path', { d, fill: 'none', stroke: 'var(--accent-blue)', 'stroke-opacity': 0.55, 'stroke-width': width });
+    path.appendChild(svgEl('title', {}, `${e.source} → ${e.target}: ${Object.keys(e.categories).join(', ')} (${e.count} events)`));
+    g.appendChild(path);
+  });
+  dests.forEach(d => {
+    const p = dpos[d];
+    const grp = svgEl('g', {});
+    grp.appendChild(svgEl('rect', { x: p.x, y: p.y, width: nodeW, height: nodeH, rx: 8, fill: 'none', stroke: 'var(--border)', 'stroke-dasharray': '4 3' }));
+    const t = svgEl('text', { x: p.x + 12, y: p.y + 20, fill: 'currentColor', 'font-size': 12 }, d.length > 28 ? d.slice(0, 27) + '…' : d);
+    grp.appendChild(t);
+    grp.appendChild(svgEl('text', { x: p.x + 12, y: p.y + 36, fill: 'currentColor', 'font-size': 10.5, opacity: 0.6 }, 'outside destination'));
+    g.appendChild(grp);
+  });
+  flowData.nodes.forEach(n => {
+    const p = pos[n.id], color = FLOW_COLOR[n.status] || FLOW_COLOR.grey;
+    const grp = svgEl('g', { class: 'flow-node', tabindex: 0, role: 'button', 'aria-label': `${n.id}: ${n.status}` });
+    grp.appendChild(svgEl('rect', { x: p.x, y: p.y, width: nodeW, height: nodeH, rx: 8, fill: color, 'fill-opacity': 0.14, stroke: color, 'stroke-width': 1.5 }));
+    grp.appendChild(svgEl('text', { x: p.x + 12, y: p.y + 20 }, n.id.length > 26 ? n.id.slice(0, 25) + '…' : n.id));
+    const sub = n.observed.length ? n.observed.slice(0, 3).map(c => c.category).join(', ') + (n.observed.length > 3 ? '…' : '') : 'nothing observed';
+    grp.appendChild(svgEl('text', { x: p.x + 12, y: p.y + 36, class: 'sub' }, sub));
+    grp.addEventListener('click', () => selectFlowNode(n.id));
+    grp.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectFlowNode(n.id); } });
+    g.appendChild(grp);
+  });
+}
+
+function selectFlowNode(id) {
+  const n = flowData.nodes.find(x => x.id === id);
+  if (!n) return;
+  const when = t => t ? new Date(t).toLocaleString() : '';
+  const owner = n.owner ? [n.owner.team, n.owner.slack_channel, n.owner.email].filter(Boolean).map(escapeHtml).join(' · ') : 'no owner set';
+  const obs = n.observed.length ? `<table style="width:100%;font-size:12px;border-collapse:collapse;"><tr style="text-align:left;color:var(--text-muted)"><th>Data</th><th>Events</th><th>Declared</th><th>Last seen</th></tr>` +
+    n.observed.map(c => `<tr><td>${escapeHtml(c.category)}<div class="inc-hint">${c.fields.map(escapeHtml).join(', ')}</div></td><td class="mono">${Number(c.count).toLocaleString()}</td><td>${c.declared ? 'yes' : '<b style="color:var(--medium)">no</b>'}</td><td>${escapeHtml(when(c.last_seen))}</td></tr>`).join('') + `</table>`
+    : '<div style="color:var(--text-muted);font-size:12px;">Nothing has been observed in this system yet.</div>';
+  const notSeen = n.declared.filter(d => !d.observed);
+  const decl = n.declared.length ? `<div style="margin-top:10px;font-size:12px;"><b>Declared:</b> ${n.declared.map(d => `${escapeHtml(d.field)} (${escapeHtml(d.category)}, ${escapeHtml(d.purpose)}, ${Number(d.retention_days)} days)`).join('; ')}</div>` : '<div style="margin-top:10px;font-size:12px;color:var(--medium)">No fields are declared for this system in the policy.</div>';
+  const incs = n.incidents.length ? `<div style="margin-top:10px;font-size:12px;"><b>Open incidents (${n.open_incidents}):</b>` +
+    n.incidents.map(i => `<div style="margin:3px 0;"><span class="badge ${safeId(i.severity)}">${escapeHtml(i.severity)}</span> INC-${escapeHtml(i.number)} <span class="inc-template">${escapeHtml((i.template || '').slice(0, 60))}</span></div>`).join('') +
+    `<button class="btn btn-secondary" style="font-size:11px;margin-top:4px;" onclick="openSystemIncidents('${safeId(n.id)}')">Open in the Audit Ledger</button></div>` : '';
+  document.getElementById('flowPanel').innerHTML =
+    `<h3 style="margin:0 0 4px;font-size:15px;">${escapeHtml(n.id)} <span class="flow-dot" style="background:${FLOW_COLOR[n.status]}"></span></h3>` +
+    `<div class="inc-hint" style="margin-bottom:10px;">Owner: ${owner}</div>` + obs + decl + (notSeen.length ? `<div style="margin-top:6px;font-size:12px;color:var(--text-muted)">Declared but not observed: ${notSeen.map(d => escapeHtml(d.field)).join(', ')}</div>` : '') + incs;
+}
+
+function openSystemIncidents(system) {
+  ledgerView = 'incidents';
+  try { localStorage.setItem('veritas_ledger_view', ledgerView); } catch (e) {}
+  showTab('audit');
+  document.getElementById('i-system').value = system;
+  loadIncidents();
+}
+
+async function downloadFlowsCSV() {
+  if (!currentOrgId) return;
+  const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/flows/export?format=csv`, { credentials: 'include' });
+  if (!r.ok) { showToast('Export failed', 'error'); return; }
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement('a');
+  a.href = url; a.download = `observed-processing-${currentOrgId}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+async function downloadFlowsPDF() {
+  if (!currentOrgId) return;
+  const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/flows/export?format=json`, { credentials: 'include' });
+  if (!r.ok) { showToast('Export failed', 'error'); return; }
+  const data = await r.json();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  doc.setFillColor(10, 10, 10); doc.rect(0, 0, pageW, 22, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(255, 255, 255);
+  doc.text('Record of observed processing', 14, 10);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+  doc.text(`Organisation: ${data.org}   |   Generated: ${data.generated_at.substring(0, 19).replace('T', ' ')} UTC`, 14, 17);
+  doc.setTextColor(60, 60, 60);
+  doc.text(doc.splitTextToSize(data.note, pageW - 28), 14, 28);
+  const dash = v => (v === '' || v === null || v === undefined) ? '—' : String(v);
+  doc.autoTable({
+    startY: 38,
+    head: [['Type', 'System', 'Field / destination', 'Data', 'Purpose', 'Consent scope', 'Retention (days)', 'Declared', 'Observed', 'Events', 'First seen', 'Last seen', 'Open incidents']],
+    body: data.rows.map(x => [x.record_type, x.system, x.field_or_destination, x.data_category, x.declared_purpose, x.consent_scope, x.retention_days, x.declared, x.observed, x.observed_events, (x.first_seen || '').substring(0, 10), (x.last_seen || '').substring(0, 10), x.open_incidents].map(dash)),
+    styles: { fontSize: 7, cellPadding: 1.5 },
+    headStyles: { fillColor: [30, 30, 30] },
+  });
+  doc.save(`record-of-observed-processing-${currentOrgId}.pdf`);
 }
 
 // ---- Cryptographic Hash Chain Verification ----

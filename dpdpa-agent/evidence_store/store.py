@@ -115,6 +115,7 @@ from typing import List, Optional
 
 from db_encryption import decrypt_field, encrypt_field
 from evidence_store import canonical as cn
+from evidence_store import flows as flows_mod
 from evidence_store import incidents as inc
 from llm_explainer.explainer import ExplainedVerdict
 from schemas.models import RemediationStatus
@@ -224,6 +225,7 @@ class EvidenceStore:
         # do not wait for the writer. A commit is still durable once it returns.
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._init_schema()
+        self.flows = flows_mod.FlowCounter(self)
 
     def _init_schema(self) -> None:
         with self._lock:
@@ -245,6 +247,7 @@ class EvidenceStore:
             self._migrate_add_chain_columns()
             self._migrate_add_case_tables()
             inc.create_tables(self._conn)
+            flows_mod.create_tables(self._conn)
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_verdict_id ON evidence(verdict_id)"
             )
@@ -972,7 +975,11 @@ class EvidenceStore:
         return inc.backfill(self, tenant_id)
 
     def close(self) -> None:
-        """Close the SQLite connection."""
+        """Close the SQLite connection (the pending flow counts are written first)."""
+        try:
+            self.flows.flush()
+        except Exception:
+            logger.debug("flow counts not written at close", exc_info=True)
         self._conn.close()
 
 

@@ -198,6 +198,8 @@ from api.anchors import router as anchors_router  # noqa: E402
 app.include_router(anchors_router)
 from api.incidents import router as incidents_router  # noqa: E402
 app.include_router(incidents_router)
+from api.flows import router as flows_router  # noqa: E402
+app.include_router(flows_router)
 
 
 # ---------------------------------------------------------------------------

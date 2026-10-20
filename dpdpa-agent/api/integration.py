@@ -75,9 +75,10 @@ from evidence_store.store import get_store
 from investigation import investigate, parse_reference
 import alerts
 from incidents.template import template_of
+from flows.destination import destination_of
 from labels import check_label
 from llm_explainer.explainer import ExplainedVerdict, build_deferred_explanation
-from masking import mask_fields, mask_text
+from masking import _label_for_entity_type, mask_fields, mask_text
 from org_config.store import (
     get_config_raw, get_config_version_meta,
     list_registered_orgs, upload_org_config as store_upload_org_config,
@@ -155,6 +156,14 @@ async def _process_event(event: Event, *, write_to_store: bool) -> Dict[str, Any
             detail="Veritas is busy detecting earlier events. Retry shortly; nothing was lost.",
         )
     verdicts: List[Verdict] = evaluate_event(detected)
+    if write_to_store and detected.matched_entities:
+        try:   # counts of what was observed where (never values), for the observed processing map
+            get_store().flows.record(
+                event.tenant_id, event.source_system,
+                [(m.field, _label_for_entity_type(m.entity_type).lower()) for m in detected.matched_entities],
+                destination_of(event.fields, event.raw_snippet))
+        except Exception:
+            logger.debug("flow count failed", exc_info=True)
 
     store = get_store() if write_to_store else None
     grouping = None
