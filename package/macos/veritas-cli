@@ -304,7 +304,15 @@ case "$1" in
     rm -rf /opt/veritas
     if [ "$PURGE" = yes ]; then
       rm -rf "$DATA_DIR" /var/log/veritas /etc/veritas
-      dscl . -delete "/Users/$SVC_USER" 2>/dev/null || true
+      pkill -u "$SVC_USER" 2>/dev/null || true       # a process still running as the account blocks its removal
+      for _try in 1 2 3 4 5 6; do
+        dscl . -delete "/Users/$SVC_USER" 2>/dev/null || true
+        id "$SVC_USER" >/dev/null 2>&1 || break
+        sleep 1                                        # the directory service can lag behind
+      done
+      if id "$SVC_USER" >/dev/null 2>&1; then
+        echo "NOTE: the service account $SVC_USER could not be removed. Remove it with: sudo dscl . -delete /Users/$SVC_USER"
+      fi
       echo "Veritas and all of its data were removed."
     else
       echo "Veritas was removed. Its data is kept in $DATA_DIR (the license, databases, evidence) and its settings in /etc/veritas/config.env."
