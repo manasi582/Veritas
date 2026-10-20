@@ -2,6 +2,13 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
+## 1.0.30
+
+- **New dashboard look:** a lavender page with a floating cream panel, white rounded cards, pill navigation across the top, and a palette of lime, orange, violet, cream and near-black. A dark theme with lime accents is one click away; light is the default. The sign-in and first-run pages match.
+- **New logo and favicon** in the header, the browser tab and the sign-in pages.
+- No behaviour changed: every page, button and setting works as in 1.0.29, which carries everything built since 1.0.28 (see below).
+- A step-by-step Mac test checklist for the whole release: `docs/MAC_FEATURE_TEST_CHECKLIST.md`.
+
 ## 1.0.29
 
 This release carries everything built since 1.0.28: the trust, visibility and prevention features, the problem-statement features (schema watch, payload tap, retention review, notice registry, streaming receivers), the audit pack, migration gate, breach pack and policy packs, and configurable rules with approvals. Sections below, newest work first.
