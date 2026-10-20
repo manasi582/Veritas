@@ -253,7 +253,9 @@ class E2E:
                           "support-ticketing": {"team": "Support", "email": "support@e2e.test"},
                           "marketing-service": {"team": "Marketing", "email": "marketing@e2e.test"},
                           "noisy-service": {"team": "Platform", "email": "platform@e2e.test"},
-                          "retention-demo": {"team": "Data", "email": "data@e2e.test"}}}
+                          "retention-demo": {"team": "Data", "email": "data@e2e.test"}},
+               "notices": [{"notice_id": "n-core", "version": "3", "title": "Customer privacy notice", "effective_from": "2026-01-01",
+                            "review_by": "2030-01-01", "data_categories": ["phone"], "systems": ["*"], "languages": ["en", "hi"]}]}
         check(self.post(self.admins, f"/v1/orgs/{ORG}/config", json=cfg).json().get("status") == "ok", "the organization was not accepted")
         other = {"org_id": OTHER, "fields": fields("billing", "phone")}
         check(self.post(self.admins, f"/v1/orgs/{OTHER}/config", json=other).json().get("status") == "ok", "the second organization was not accepted")
@@ -415,8 +417,31 @@ class E2E:
                          "the period to be overdue again after the data kept arriving")
         check(self.get(self.admins, f"/api/{ORG}/verify-chain").json()["valid"], "the chain is not valid after the retention task")
 
+        step("notice registry (R8): a kind of data no current notice covers is a finding, once; recording a notice closes the gap")
+        cov = self.get(self.admins, f"/v1/{ORG}/notices").json()
+        check(cov["enabled"] and cov["notices"][0]["status"] == "current", f"the notice is not shown as current: {cov['notices']}")
+        uncovered = {(o["system"], o["category"]) for o in cov["observed"] if not o["covered"]}
+        check(("noisy-service", "aadhaar") in uncovered and ("noisy-service", "phone") not in uncovered, f"coverage is wrong: {uncovered}")
+        gaps = wait_for(lambda: [v for v in self.get(self.admins, f"/api/{ORG}/verdicts").json()["verdicts"] if v["rule_id"] == "NOTICE_001"],
+                        "the NOTICE_001 findings")
+        check(any(v["source_system"] == "noisy-service" and v["field"] == "aadhaar" for v in gaps), "no NOTICE_001 for aadhaar in noisy-service")
+        before = len(gaps)
+        requests.post(f"{self.base}/v1/{ORG}/events", headers={"Authorization": f"Bearer {tok}"}, timeout=60,
+                      json={"source_type": "log", "source_system": "noisy-service", "raw_snippet": f"another line with aadhaar {AADHAAR}"})
+        after = len([v for v in self.get(self.admins, f"/api/{ORG}/verdicts").json()["verdicts"] if v["rule_id"] == "NOTICE_001"
+                     and v["source_system"] == "noisy-service" and v["field"] == "aadhaar"])
+        check(after == 1, f"the same gap was raised {after} times")
+        policy = self.get(self.admins, f"/v1/orgs/{ORG}/config").json()
+        policy = policy.get("config", policy)
+        policy["notices"].append({"notice_id": "n-kyc", "version": "1", "effective_from": "2026-02-01", "data_categories": ["aadhaar"],
+                                  "systems": ["noisy-service"]})
+        check(self.post(self.admins, f"/v1/orgs/{ORG}/config", json=policy).json().get("status") == "ok", "the policy with the new notice was not accepted")
+        cov = self.get(self.admins, f"/v1/{ORG}/notices").json()
+        check(next(o for o in cov["observed"] if o["system"] == "noisy-service" and o["category"] == "aadhaar")["covered"], "the new notice did not close the gap")
+        check(not any(raw in json.dumps(cov) for raw in RAW), "the notice review holds a raw value")
+
         step("resolution and recurrence (F3): resolve, wait out the grace period, see it come back")
-        target = noisy[0]
+        target = max((i for i in noisy if i["rule_id"] == "EXPOSURE_001"), key=lambda i: i["count"])
         self.post(self.admins, f"/v1/{ORG}/incidents/{target['incident_id']}/status", json={"status": "ACKNOWLEDGED"})
         self.post(self.admins, f"/v1/{ORG}/incidents/{target['incident_id']}/status", json={"status": "RESOLVED", "reason": "fixed in 4.2"})
         time.sleep(4)

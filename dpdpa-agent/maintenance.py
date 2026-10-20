@@ -160,6 +160,23 @@ def run_once(now: Optional[datetime] = None) -> dict:
         logger.error("Scheduled chain check FAILED to run: %s", e)
         status.update(last_chain_check_at=now.isoformat(), chain_check_error=str(e)[:300])
 
+    # ---- notices: gaps that appeared because a notice passed its review date or was retired ----
+    try:
+        from config_loader import load_org_config
+        from evidence_store.store import get_store
+        from notice_registry import coverage as notice_coverage
+        store = get_store()
+        for org in store.tenants():
+            try:
+                cfg = load_org_config(org)
+            except Exception:
+                continue
+            raised = notice_coverage.sweep(store, org, cfg)
+            if raised:
+                logger.warning("Notice registry: %d new gap(s) in %s", raised, org)
+    except Exception:
+        logger.debug("notice sweep skipped", exc_info=True)
+
     _write_status(status)
     try:
         import alerts

@@ -78,6 +78,7 @@ from incidents.template import template_of
 from detection.agent_reported import LABEL_TO_ENTITY, matches_from_agent
 from flows.destination import destination_of
 from labels import check_label
+from notice_registry.coverage import gaps_for_event as notice_gaps
 from schema_watch.evaluate import evaluate as schema_evaluate
 from llm_explainer.explainer import ExplainedVerdict, build_deferred_explanation
 from masking import _label_for_entity_type, mask_fields, mask_text
@@ -181,6 +182,12 @@ async def _process_event(event: Event, *, write_to_store: bool,
                 destination_of(event.fields, event.raw_snippet), source_kind=source_kind or event.source_type.value)
         except Exception:
             logger.debug("flow count failed", exc_info=True)
+        try:   # a kind of data observed where no current notice covers it (phase E): once per gap, only if notices are recorded
+            verdicts += notice_gaps(get_store(), event.tenant_id, load_org_config(event.tenant_id), event.source_system,
+                                    {_label_for_entity_type(m.entity_type).lower() for m in detected.matched_entities},
+                                    str(event.event_id), event.source_type)
+        except Exception:
+            logger.warning("notice coverage check failed for an event", exc_info=True)
 
     store = get_store() if write_to_store else None
     tokens: list = []

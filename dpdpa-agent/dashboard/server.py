@@ -206,6 +206,8 @@ from api.schema_watch import router as schema_router  # noqa: E402
 app.include_router(schema_router)
 from api.retention import router as retention_router  # noqa: E402
 app.include_router(retention_router)
+from api.notices import router as notices_router  # noqa: E402
+app.include_router(notices_router)
 
 
 # ---------------------------------------------------------------------------

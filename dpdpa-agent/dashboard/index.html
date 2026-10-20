@@ -1371,7 +1371,8 @@
       align-items: center;
     }
 
-    .form-row.fields-row { grid-template-columns: repeat(6, 1fr) 128px 26px; }
+    .form-row.fields-row { grid-template-columns: repeat(6, 1fr) 128px 1fr 26px; }
+    .form-row.notice-row { grid-template-columns: 1fr 70px 125px 125px 1.4fr 1.4fr 26px; }
     .form-row.identifiers-row { grid-template-columns: 1fr 1.4fr 125px 26px; }
     .form-row.linkage-row { grid-template-columns: 2fr 1fr 26px; }
 
@@ -2080,7 +2081,12 @@
           <div class="table-container" style="flex:1 1 560px;min-width:320px;padding:8px;"><svg id="flowSvg" width="100%" height="320" role="img" aria-label="Systems and the kinds of personal data observed in them"></svg></div>
           <div class="table-container" style="flex:0 1 380px;min-width:280px;padding:14px;" id="flowPanel"><div style="color:var(--text-muted);font-size:13px;">Select a system to see what was observed there.</div></div>
         </div>
-      <div class="table-container" style="margin-top:14px;padding:14px;" id="retentionPanel">
+      <div class="table-container" style="margin-top:14px;padding:14px;" id="noticePanel">
+          <h3 style="margin:0 0 4px;font-size:15px;">Notice coverage</h3>
+          <div class="inc-hint" id="noticeNote" style="margin-bottom:8px;"></div>
+          <div id="noticeBody" class="inc-hint">Loading…</div>
+        </div>
+        <div class="table-container" style="margin-top:14px;padding:14px;" id="retentionPanel">
           <h3 style="margin:0 0 4px;font-size:15px;">Retention review</h3>
           <div class="inc-hint" id="retentionNote" style="margin-bottom:8px;"></div>
           <table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="text-align:left;color:var(--text-muted)">
@@ -2443,6 +2449,15 @@
     </div>
     <div id="orgLinkageRows"></div>
     <button type="button" class="form-add-row" onclick="addLinkageRow()">+ Add Linkage Rule</button>
+  </div>
+
+  <div class="form-section">
+    <div class="form-section-title">
+      <h4>Privacy notices (optional)</h4>
+      <span class="hint">Veritas checks that a current notice covers the data it observes; it cannot judge a notice</span>
+    </div>
+    <div id="orgNoticeRows"></div>
+    <button type="button" class="form-add-row" onclick="addNoticeRow()">+ Add Notice</button>
   </div>
 
   <div class="modal-actions">
@@ -3062,12 +3077,38 @@ async function loadFlows() {
     renderFlowMap();
     loadSchemaChanges();
     loadRetention();
+    loadNotices();
   } catch (e) {
     showToast('Failed to load the data map', 'error');
   }
 }
 
 const RETENTION_COLOR = { 'overdue': 'var(--high)', 'due soon': 'var(--medium)', 'within': 'var(--low)', 'past, not seen': 'var(--text-muted)', 'not observed': 'var(--text-muted)' };
+
+async function loadNotices() {
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/notices`, { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('noticeNote').textContent = d.note || '';
+    const box = document.getElementById('noticeBody');
+    if (!d.enabled) {
+      box.textContent = 'No notices are recorded in the policy, so coverage is not checked. Add a notices section to the policy (see docs/PS_ALIGNMENT_PLAN.md, Phase E) to turn it on.';
+      return;
+    }
+    const colour = s => s === 'current' ? 'var(--low)' : (s === 'review overdue' ? 'var(--medium)' : 'var(--text-muted)');
+    const gap = d.observed.filter(o => !o.covered);
+    const decl = d.declared.filter(x => !x.covered);
+    box.innerHTML =
+      `<div style="font-size:12px;margin-bottom:8px;">${d.summary.observed_uncovered} observed kind(s) of data and ${d.summary.declared_uncovered} declared field(s) are not covered by a current notice.</div>` +
+      '<table style="width:100%;font-size:12px;border-collapse:collapse;"><tr style="text-align:left;color:var(--text-muted)"><th>Notice</th><th>Version</th><th>Status</th><th>Covers</th><th>Systems</th><th>Review by</th></tr>' +
+      d.notices.map(n => `<tr><td class="mono">${escapeHtml(n.notice_id)}</td><td>${escapeHtml(n.version)}</td><td style="color:${colour(n.status)}">${escapeHtml(n.status)}</td>
+        <td>${n.data_categories.map(escapeHtml).join(', ')}</td><td>${n.systems.map(escapeHtml).join(', ')}</td><td>${n.review_by ? escapeHtml(n.review_by) : '—'}</td></tr>`).join('') + '</table>' +
+      (gap.length ? '<div style="margin-top:10px;font-size:12px;"><b>Observed, not covered:</b> ' + gap.map(o => `${escapeHtml(o.system)} · ${escapeHtml(o.category)} (${Number(o.events)} events)`).join('; ') + '</div>' : '') +
+      (decl.length ? '<div style="margin-top:6px;font-size:12px;"><b>Declared, not covered:</b> ' + decl.map(x => `${escapeHtml(x.system)} · ${escapeHtml(x.field)} (${escapeHtml(x.gap || '')})`).join('; ') + '</div>' : '') +
+      (d.systems_without_notice.length ? '<div style="margin-top:6px;font-size:12px;"><b>Systems with no current notice:</b> ' + d.systems_without_notice.map(escapeHtml).join(', ') + '</div>' : '');
+  } catch (e) { /* secondary panel */ }
+}
 
 async function loadRetention() {
   try {
@@ -3576,6 +3617,7 @@ function openAddOrgModal() {
   document.getElementById('orgFieldsRows').innerHTML = '';
   document.getElementById('orgIdentifiersRows').innerHTML = '';
   document.getElementById('orgLinkageRows').innerHTML = '';
+  document.getElementById('orgNoticeRows').innerHTML = '';
   addFieldRow();
   document.getElementById('addOrgOverlay').classList.add('open');
   document.getElementById('addOrgModal').classList.add('open');
@@ -3592,6 +3634,9 @@ async function openEditPolicyModal() {
   } catch (e) { /* fall through */ }
   if (!config) { showToast('Could not load the current policy.', 'error'); return; }
   openAddOrgModal();
+  // Sections this form does not edit (owners, schema hints, notices...) are kept as they are when the policy is saved.
+  const edited = new Set(['org_id', 'fields', 'identifiers', 'linkage_rules', 'notices']);
+  window.__policyExtras = Object.fromEntries(Object.entries(config).filter(([k]) => !edited.has(k)));
   const idInput = document.getElementById('newOrgId');
   idInput.value = currentOrgId;
   idInput.readOnly = true;
@@ -3600,9 +3645,11 @@ async function openEditPolicyModal() {
   if (!(config.fields || []).length) addFieldRow();
   (config.identifiers || []).forEach(i => addIdentifierRow(i));
   (config.linkage_rules || []).forEach(l => addLinkageRow(l));
+  (config.notices || []).forEach(n => addNoticeRow(n));
 }
 
 function closeAddOrgModal() {
+  window.__policyExtras = null;
   document.getElementById('addOrgOverlay').classList.remove('open');
   document.getElementById('addOrgModal').classList.remove('open');
   // Closed without creating the first organization: back to the welcome screen.
@@ -3621,6 +3668,7 @@ function addFieldRow(p) {
     <input class="f-retention_days" type="number" min="1" placeholder="retention_days" />
     <input class="f-source_system" placeholder="source_system" />
     <input class="f-data_since" type="date" title="Data since (optional): retention is counted from this date" />
+    <input class="f-notice_id" placeholder="notice_id (optional)" title="The notice that covers this field (optional)" />
     <button type="button" class="row-remove" onclick="this.parentElement.remove()" title="Remove">✕</button>
   `;
   // set values through the DOM (never through HTML) so policy text cannot inject markup
@@ -3629,6 +3677,7 @@ function addFieldRow(p) {
   set('.f-declared_purpose', p.declared_purpose); set('.f-consent_scope', p.consent_scope);
   set('.f-retention_days', p.retention_days); set('.f-source_system', p.source_system);
   if (p.data_since) set('.f-data_since', String(p.data_since).slice(0, 10));
+  set('.f-notice_id', p.notice_id);
   document.getElementById('orgFieldsRows').appendChild(row);
 }
 
@@ -3650,6 +3699,25 @@ function addIdentifierRow(p) {
   row.querySelector('.i-pattern').value = p.pattern || '';
   if (p.validator) row.querySelector('.i-validator').value = p.validator;
   document.getElementById('orgIdentifiersRows').appendChild(row);
+}
+
+function addNoticeRow(p) {
+  p = p || {};
+  const row = document.createElement('div');
+  row.className = 'form-row notice-row';
+  row.innerHTML = `
+    <input class="n-id" placeholder="notice_id" />
+    <input class="n-version" placeholder="version" />
+    <input class="n-effective" type="date" title="Effective from" />
+    <input class="n-review" type="date" title="Next review by (optional)" />
+    <input class="n-categories" placeholder="data kinds, e.g. phone, email" />
+    <input class="n-systems" placeholder="systems, or *" />
+    <button type="button" class="row-remove" onclick="this.parentElement.remove()" title="Remove">✕</button>`;
+  const set = (cls, v) => { if (v !== undefined && v !== null) row.querySelector(cls).value = v; };
+  set('.n-id', p.notice_id); set('.n-version', p.version); set('.n-effective', p.effective_from); set('.n-review', p.review_by);
+  set('.n-categories', (p.data_categories || []).join(', ')); set('.n-systems', (p.systems || []).join(', '));
+  row.dataset.keep = JSON.stringify({ title: p.title || '', languages: p.languages || [], retired: !!p.retired });   // not edited here: kept
+  document.getElementById('orgNoticeRows').appendChild(row);
 }
 
 function addLinkageRow(p) {
@@ -3680,6 +3748,8 @@ function buildOrgConfigFromForm() {
     };
     const since = row.querySelector('.f-data_since').value;   // YYYY-MM-DD or ''
     if (since) f.data_since = since;                          // omitted when empty: upload date is used
+    const nid = row.querySelector('.f-notice_id').value.trim();
+    if (nid) f.notice_id = nid;
     return f;
   });
 
@@ -3698,7 +3768,21 @@ function buildOrgConfigFromForm() {
     }))
     .filter(l => l.fields.length > 0);
 
-  return { org_id, identifiers, fields, linkage_rules };
+  const notices = [...document.querySelectorAll('#orgNoticeRows .notice-row')].map(row => {
+    const keep = JSON.parse(row.dataset.keep || '{}');
+    const n = {
+      notice_id: row.querySelector('.n-id').value.trim(), version: row.querySelector('.n-version').value.trim(),
+      effective_from: row.querySelector('.n-effective').value,
+      data_categories: row.querySelector('.n-categories').value.split(',').map(x => x.trim()).filter(Boolean),
+      systems: row.querySelector('.n-systems').value.split(',').map(x => x.trim()).filter(Boolean),
+      languages: keep.languages || [], retired: !!keep.retired,
+    };
+    if (keep.title) n.title = keep.title;
+    const review = row.querySelector('.n-review').value;
+    if (review) n.review_by = review;
+    return n;
+  }).filter(n => n.notice_id || n.version || n.data_categories.length);
+  return { org_id, identifiers, fields, linkage_rules, notices };
 }
 
 function validateOrgFormClientSide(config) {
@@ -3748,6 +3832,7 @@ function showAddOrgErrors(messages) {
 
 async function submitNewOrg() {
   const config = buildOrgConfigFromForm();
+  if (document.getElementById('newOrgId').readOnly && window.__policyExtras) Object.assign(config, window.__policyExtras);
   const clientErrors = validateOrgFormClientSide(config);
   if (clientErrors.length > 0) {
     showAddOrgErrors(clientErrors);

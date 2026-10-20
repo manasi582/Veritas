@@ -179,6 +179,10 @@ class OrgField(BaseModel):
             "their events carry in source_system."
         )
     )
+    notice_id: Optional[str] = Field(
+        default=None, pattern=r"^[A-Za-z0-9_.-]{1,60}$",
+        description="Optional: the notice that covers this field. If set, it must be one of the policy's notices."
+    )
     data_since: Optional[datetime] = Field(
         default=None,
         description=(
@@ -249,6 +253,43 @@ class LinkageRule(BaseModel):
         return v
 
 
+class NoticeSpec(BaseModel):
+    """
+    A privacy notice the organization has published: which kinds of data it describes, for which systems, since when, and
+    when it is next due for review. Veritas checks that a *current* notice covers what it observes. It does not read the
+    notice, judge whether it is legally adequate, or know whether it was shown to anyone.
+    """
+    notice_id: str = Field(..., pattern=r"^[A-Za-z0-9_.-]{1,60}$")
+    version: str = Field(..., min_length=1, max_length=40)
+    title: str = Field(default="", max_length=200)
+    effective_from: date
+    review_by: Optional[date] = None
+    retired: bool = False
+    data_categories: List[str] = Field(..., min_length=1, max_length=40,
+                                       description="kinds of data the notice describes: phone, email, aadhaar, pan, card, name, dob, address ...")
+    systems: List[str] = Field(..., min_length=1, max_length=200,
+                               description="source systems it covers; '*' means every system")
+    languages: List[str] = Field(default_factory=list, max_length=40)
+
+    @field_validator("data_categories")
+    @classmethod
+    def _categories(cls, v: List[str]) -> List[str]:
+        out = []
+        for c in v:
+            c = str(c).strip().lower()
+            if not re.match(r"^[a-z][a-z0-9_]{1,30}$", c):
+                raise ValueError(f"{c!r} is not a kind of data (use words such as phone, email, aadhaar)")
+            out.append(c)
+        return out
+
+    @field_validator("systems")
+    @classmethod
+    def _systems(cls, v: List[str]) -> List[str]:
+        if any((not isinstance(x, str)) or not x.strip() or len(x) > 200 for x in v):
+            raise ValueError("systems must be names (or '*')")
+        return [x.strip() for x in v]
+
+
 class OrgOwner(BaseModel):
     """Who looks after a source system: shown on its incidents so a finding reaches a person, not a queue."""
     team: Optional[str] = Field(default=None, max_length=120)
@@ -289,6 +330,10 @@ class OrgConfig(BaseModel):
         )
     )
 
+    notices: List[NoticeSpec] = Field(
+        default_factory=list,
+        description="The privacy notices in force, so Veritas can show which declared and observed data they cover. Optional."
+    )
     schema_hints: Dict[str, str] = Field(
         default_factory=dict,
         description=("Corrections for the guess Veritas makes about database columns: a column name or pattern (for "
@@ -299,6 +344,17 @@ class OrgConfig(BaseModel):
         default_factory=dict,
         description="Owning team and channel per source_system, shown on incidents. Optional."
     )
+
+    @model_validator(mode="after")
+    def check_notices(self) -> "OrgConfig":
+        ids = [n.notice_id for n in self.notices]
+        dup = sorted({i for i in ids if ids.count(i) > 1})
+        if dup:
+            raise ValueError(f"notices: duplicate notice_id {dup}. Each notice needs its own id (retire an old version, add a new id).")
+        unknown = sorted({f.notice_id for f in self.fields if f.notice_id and f.notice_id not in ids})
+        if unknown:
+            raise ValueError(f"fields refer to notice_id {unknown} that is not in 'notices'.")
+        return self
 
     @field_validator("schema_hints")
     @classmethod

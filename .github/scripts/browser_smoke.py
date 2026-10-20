@@ -274,6 +274,25 @@ def flow(browser, pages: list) -> None:
     expect(page.locator("#orgFieldsRows .f-data_since").first).to_have_value(since)
     page.click("#addOrgModal .modal-close")
 
+    step("saving the policy in the dashboard keeps the sections its form does not edit (owners)")
+    page.evaluate("""async (org) => {
+        const r = await fetch(`/v1/orgs/${org}/config`, {credentials: 'include'});
+        const d = await r.json(); const c = d.config || d;
+        c.owners = {'kyc-service': {team: 'Risk', email: 'risk@example.com'}};
+        c.notices = [{notice_id: 'n-smoke', version: '1', effective_from: '2026-01-01', data_categories: ['aadhaar'], systems: ['kyc-service']}];
+        await fetch(`/v1/orgs/${org}/config`, {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(c)});
+    }""", ORG)
+    page.click("#main-policy button:has-text('Edit Policy')")
+    expect(page.locator("#newOrgId")).to_have_js_property("readOnly", True)
+    page.click("#addOrgSubmitBtn")
+    expect(page.locator("#toast")).to_contain_text("updated")
+    owners = page.evaluate("""async (org) => { const r = await fetch(`/v1/orgs/${org}/config`, {credentials: 'include'});
+                                               const d = await r.json(); return (d.config || d).owners; }""", ORG)
+    assert owners and owners["kyc-service"]["team"] == "Risk", f"the dashboard dropped the owners when saving the policy: {owners}"
+    notices = page.evaluate("""async (org) => { const r = await fetch(`/v1/orgs/${org}/config`, {credentials: 'include'});
+                                                const d = await r.json(); return (d.config || d).notices; }""", ORG)
+    assert notices and notices[0]["notice_id"] == "n-smoke" and notices[0]["data_categories"] == ["aadhaar"], f"the notices did not survive a save: {notices}"
+
     # ── 8. Users: add, reset, forced password change ────────────────────
     step("Users tab: add a viewer and give it access to the organization")
     page.click("#nav-users")
