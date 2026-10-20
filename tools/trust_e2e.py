@@ -360,6 +360,39 @@ class E2E:
         node = self.flow_node(self.admins, "loan-db")
         check(node and any("schema" in c["kinds"] for c in node["observed"]), f"the data map does not show the schema source: {node}")
 
+        step("payload tap (R3): an API response carries personal data in an undeclared field; the tap masks it in the service")
+        sys.path.insert(0, str(ROOT / "veritas-sdk" / "python"))
+        import asyncio
+        import veritas_tap
+        tap = veritas_tap.Tap(self.base, tok, ORG, "customer-api", min_interval_seconds=0)
+        leaked = json.dumps({"user": {"aadhaar_no": AADHAAR, "city": "Pune"}, "items": [{"mobile": PHONE}]}).encode()
+
+        async def customers(scope, receive, send):
+            await receive()
+            await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"application/json")]})
+            await send({"type": "http.response.body", "body": leaked})
+        sent_by_app = []
+
+        async def send(m):
+            sent_by_app.append(m)
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+        asyncio.run(veritas_tap.ASGIMiddleware(customers, tap)({"type": "http", "method": "GET", "path": "/customers/42", "headers": []}, receive, send))
+        check(sent_by_app[1]["body"] == leaked, "the tap changed the application's response")
+        tap.flush()
+        api_findings = wait_for(lambda: [v for v in self.get(self.admins, f"/api/{ORG}/verdicts").json()["verdicts"]
+                                         if v["source_system"] == "customer-api"], "the finding from the tapped response")
+        check("user.aadhaar_no" in {v["field"] for v in api_findings}, f"the field is not named in the findings: {[v['field'] for v in api_findings]}")
+        check(not any(raw in json.dumps(api_findings) for raw in RAW), "a raw value reached the server through the tap")
+        node = self.flow_node(self.admins, "customer-api")
+        check(node and any("api" in c["kinds"] for c in node["observed"]), f"the data map does not show the API source: {node}")
+        spec = self.work / "openapi.json"
+        spec.write_text(json.dumps({"paths": {"/x": {"get": {"responses": {"200": {"content": {"application/json": {"example": {"phone": PHONE}}}}}}}}}))
+        gate = subprocess.run([sys.executable, str(ROOT / "veritas-sdk" / "python" / "veritas_gate.py"), str(spec)], capture_output=True, text=True)
+        check(gate.returncode == 1 and PHONE not in gate.stdout, "the pipeline gate did not fail on personal data in an example")
+        tap.close()
+
         step("resolution and recurrence (F3): resolve, wait out the grace period, see it come back")
         target = noisy[0]
         self.post(self.admins, f"/v1/{ORG}/incidents/{target['incident_id']}/status", json={"status": "ACKNOWLEDGED"})

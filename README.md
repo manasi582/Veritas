@@ -51,6 +51,7 @@ Step-by-step guides:
 | [docs/INCIDENTS.md](docs/INCIDENTS.md), [docs/FLOWS.md](docs/FLOWS.md) | Grouping thousands of findings into incidents; the observed processing map and record |
 | [docs/AGENT_REDACTION.md](docs/AGENT_REDACTION.md), [docs/RECOGNIZERS.md](docs/RECOGNIZERS.md) | Masking, hashing or dropping personal data in the agent, and the shared rules behind it |
 | [docs/SUBJECT_LOOKUP.md](docs/SUBJECT_LOOKUP.md) | Where was an identifier observed, rights requests, the erasure watch and the signed record |
+| [docs/SCHEMA_WATCH.md](docs/SCHEMA_WATCH.md), [docs/PAYLOAD_TAP.md](docs/PAYLOAD_TAP.md) | Telemetry beyond logs: database schema changes, and personal data in API payloads (libraries for Python and Node, and a pipeline gate) |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Measured cost of these features |
 | [docs/legal/](docs/legal/README.md) | Drafts of the license agreement, support policy and data handling statement (for legal review) |
 

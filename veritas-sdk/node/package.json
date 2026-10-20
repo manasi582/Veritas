@@ -1,0 +1,9 @@
+{
+  "name": "veritas-tap",
+  "version": "1.0.0",
+  "description": "Veritas payload tap for Node services: finds personal data in API payloads, masks it in-process, reports routes and fields, never values.",
+  "main": "veritas_tap.js",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test" }
+}

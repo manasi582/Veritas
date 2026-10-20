@@ -11,6 +11,8 @@ Measured with `tools/bench_trust.py` (run it on your own hardware: `python tools
 | Identifier index | one lookup in an index of 200,000 tokens | **0.2 ms** | |
 | | tokenise the identifiers of one event | under 1 µs when it holds none | |
 | Recognizer pack | find and mask two values in a log line | 10 µs | |
+| Payload tap (Python, ASGI) | extra time per request with every request inspected and reported (worst case), a 3 KB body with 80 items | **0.30 ms at the median, 0.35 ms at the 99th percentile** | under 1 ms |
+| Schema watch | parse one DDL statement (an `ALTER TABLE` with two changes) | 10 µs | |
 | Agent redaction | the agent's whole path per line (scan, mask or hash, count, queue-ready) | mask 11 µs, hash 14 µs | under 1.5 ms (test) |
 
 ## What these mean

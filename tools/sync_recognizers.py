@@ -4,5 +4,6 @@ import shutil
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-shutil.copyfile(root / "dpdpa-agent" / "veritas_recognizers.py", root / "veritas-agent" / "veritas_recognizers.py")
-print("veritas-agent/veritas_recognizers.py updated")
+for dest in ("veritas-agent", "veritas-sdk/python"):
+    shutil.copyfile(root / "dpdpa-agent" / "veritas_recognizers.py", root / dest / "veritas_recognizers.py")
+    print(dest + "/veritas_recognizers.py updated")

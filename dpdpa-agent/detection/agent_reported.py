@@ -11,7 +11,7 @@ by the server's own detection as before, and are not reported by the agent.
 from __future__ import annotations
 
 import re
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from detection.models import MatchedEntity, PATTERN_MATCH
 
@@ -21,9 +21,22 @@ _FOUND = re.compile(r"\[([A-Z]+)(?:_REDACTED|#[0-9a-f]{6}\.[0-9a-f]{16})\]")
 FREE_TEXT_FIELD = "raw_snippet"
 
 
-def matches_from_agent(raw_snippet: str, agent_detections: Dict[str, int]) -> List[MatchedEntity]:
+def matches_from_agent(raw_snippet: str, agent_detections: Dict[str, int],
+                       fields: Optional[Dict[str, str]] = None) -> List[MatchedEntity]:
+    """
+    Findings for the placeholders in `raw_snippet` (a masked log line) and in `fields` (an API payload that a library
+    in the service masked): a placeholder in a field is a finding **for that field**, so the policy's rules judge it
+    by the field's own name (`user.phone` is judged as `phone`).
+    """
     wanted = {k.lower() for k, v in (agent_detections or {}).items() if v and k.lower() in LABEL_TO_ENTITY}
     seen, out = set(), []
+    for path, value in (fields or {}).items():
+        for m in _FOUND.finditer(value if isinstance(value, str) else ""):
+            label = m.group(1).lower()
+            if label in wanted and (path, m.group(0)) not in seen:
+                seen.add((path, m.group(0)))
+                out.append(MatchedEntity(field=path, entity_type=LABEL_TO_ENTITY[label], confidence=0.9,
+                                         matched_text=m.group(0), validation_status=PATTERN_MATCH))
     for m in _FOUND.finditer(raw_snippet or ""):
         label = m.group(1).lower()
         if label not in wanted or m.group(0) in seen:

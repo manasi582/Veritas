@@ -108,6 +108,52 @@ def bench_redaction(lines=20000):
             "scan_line_without_values_us": round(t_plain / lines * 1e6, 1), "hash_one_value_us": round(t_hash / lines * 1e6, 1)}
 
 
+def bench_tap(n=2000):
+    sys.path.insert(0, str(ROOT / "veritas-sdk" / "python"))
+    import asyncio
+    import json as _json
+    import veritas_tap as vt
+    tap = vt.Tap("http://127.0.0.1:1", "t", "bench", "svc", start=False, min_interval_seconds=0, queue_size=10)
+    body = _json.dumps({"user": {"name": "x", "phone": "9876543210", "email": "a@example.com"},
+                        "items": [{"id": i, "sku": f"s{i}", "qty": i} for i in range(80)]}).encode()
+    print_size = len(body)
+
+    async def app(scope, receive, send):
+        await receive()
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"application/json")]})
+        await send({"type": "http.response.body", "body": body})
+
+    async def call(a):
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(m):
+            pass
+        await a({"type": "http", "method": "GET", "path": "/c/1", "headers": []}, receive, send)
+
+    async def timed(a):
+        out = []
+        for _ in range(n):
+            t = time.perf_counter()
+            await call(a)
+            out.append(time.perf_counter() - t)
+            while not tap.q.empty():
+                tap.q.get_nowait()
+        return out
+
+    plain = sorted(asyncio.run(timed(app)))
+    wrapped = sorted(asyncio.run(timed(vt.ASGIMiddleware(app, tap))))
+    p = lambda xs, q: xs[int(len(xs) * q) - 1]
+    return {"body_bytes": print_size, "added_p50_us": round((p(wrapped, .5) - p(plain, .5)) * 1e6), "added_p99_us": round((p(wrapped, .99) - p(plain, .99)) * 1e6)}
+
+
+def bench_schema(n=20000):
+    from schema_watch import parser
+    sql = "2026-10-20 10:00:00 UTC LOG:  statement: ALTER TABLE public.customers ADD COLUMN mobile_no varchar(15) NOT NULL DEFAULT '', DROP COLUMN old_ref;"
+    t, _ = timed(lambda: [parser.parse(sql) for _ in range(n)])
+    return {"statements": n, "parse_us_per_statement": round(t / n * 1e6, 1)}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--verdicts", type=int, default=100_000)
@@ -116,12 +162,12 @@ def main():
     os.environ["VERITAS_DATA_DIR"] = tempfile.mkdtemp()
     result = {"machine": f"{platform.platform()} / Python {platform.python_version()} / {os.cpu_count()} cores",
               "incidents": bench_incidents(a.verdicts), "flows": bench_flows(), "lookup": bench_lookup(),
-              "redaction": bench_redaction()}
+              "redaction": bench_redaction(), "payload_tap": bench_tap(), "schema_watch": bench_schema()}
     if a.json:
         print(json.dumps(result, indent=1))
         return
     print("Machine:", result["machine"])
-    for name in ("incidents", "flows", "lookup", "redaction"):
+    for name in ("incidents", "flows", "lookup", "redaction", "payload_tap", "schema_watch"):
         print(f"\n{name}")
         for k, v in result[name].items():
             print(f"  {k:36} {v}")

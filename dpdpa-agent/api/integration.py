@@ -163,7 +163,7 @@ async def _process_event(event: Event, *, write_to_store: bool,
                 detail="Veritas is busy detecting earlier events. Retry shortly; nothing was lost.",
             )
     if agent_detections:   # the agent masked or hashed these before sending: the text holds placeholders (schema 2)
-        reported = matches_from_agent(event.raw_snippet, agent_detections)
+        reported = matches_from_agent(event.raw_snippet, agent_detections, event.fields)
         if reported:
             detected = DetectedEvent(event=detected.event, contains_pii=True,
                                      matched_entities=list(detected.matched_entities) + reported)

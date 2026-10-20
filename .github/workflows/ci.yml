@@ -90,6 +90,21 @@ jobs:
           python -m pytest -q -p no:warnings
         shell: bash
 
+      # ── The payload tap (Python) and the pipeline gate ────────────────────
+      - name: SDK unit tests (Python payload tap and gate)
+        working-directory: veritas-sdk/python
+        run: python -m pytest -q -p no:warnings
+        shell: bash
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: SDK unit tests (Node payload tap, held to the same golden corpus)
+        working-directory: veritas-sdk/node
+        run: node --test
+        shell: bash
+
       # ── Smoke test: import server + hit /health ──────────────────────────
       - name: Smoke test — server startup
         working-directory: dpdpa-agent

@@ -37,10 +37,10 @@ def test_the_corpus_belongs_to_this_version_of_the_rules():
         "The rules changed: review the corpus, regenerate it, and raise PACK_VERSION.")
 
 
-def test_the_agent_copy_is_identical_to_the_canonical_file():
+@pytest.mark.parametrize("copy", ["veritas-agent", "veritas-sdk/python"])
+def test_the_copies_are_identical_to_the_canonical_file(copy):
     canonical = (ROOT / "dpdpa-agent" / "veritas_recognizers.py").read_bytes()
-    assert (ROOT / "veritas-agent" / "veritas_recognizers.py").read_bytes() == canonical, \
-        "run: python tools/sync_recognizers.py"
+    assert (ROOT / copy / "veritas_recognizers.py").read_bytes() == canonical, "run: python tools/sync_recognizers.py"
 
 
 # ---- parity with the server's recognizers --------------------------------------------------------------

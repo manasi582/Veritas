@@ -118,6 +118,10 @@ class SubjectIndex:
         for m in matches:
             category = ENTITY_CATEGORY.get(m.entity_type)
             value = m.matched_text or ""
+            tok = _TOKEN.fullmatch(value)
+            if tok:                                           # a hashed identifier in a field (an API payload) or a line
+                out.add((tok.group(2), tok.group(3), tok.group(1).lower()))
+                continue
             if not category or m.validation_status == "failed_validation" or _PLACEHOLDERISH.match(value):
                 continue
             form = vr.normalise_identifier(category.upper(), value)
