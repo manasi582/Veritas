@@ -173,7 +173,7 @@ class TestConfigValidation:
         ([{"type": "file", "source_system": "x"}], "needs a path"),
         ([{"type": "file", "path": "/x", "source_system": "x", "format": "yaml"}], "format must be one of"),
         ([{"type": "file", "path": "/x", "source_system": "x", "max_files": 0}], "max_files"),
-        ([{"type": "syslog"}], "unknown type"),
+        ([{"type": "carrier-pigeon"}], "unknown type"),
         ("nope", "must be a list"),
     ])
     def test_problems_are_reported(self, sources, fragment):
