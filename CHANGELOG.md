@@ -2,7 +2,9 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
-## Unreleased (1.2.0)
+## 1.0.29
+
+This release carries everything built since 1.0.28: the trust, visibility and prevention features, the problem-statement features (schema watch, payload tap, retention review, notice registry, streaming receivers), the audit pack, migration gate, breach pack and policy packs, and configurable rules with approvals. Sections below, newest work first.
 
 ### Rules you can tune, with guardrails
 - **Six core rules as data** (`docs/RULES.md`): what each looks at, its default severity, evidence kept and wording, shown on a new **Rules** page and by `GET /v1/{org}/rules`.
@@ -29,7 +31,7 @@ Work towards full alignment with the problem statement (`docs/PS_ALIGNMENT_PLAN.
 - **Fix:** saving the policy in the dashboard used to rebuild it from the form and so dropped the owners (added with incidents); it now keeps every section the form does not edit.
 - **Phase F, streaming receivers:** the server accepts OpenTelemetry logs (`POST /v1/{org}/otlp/logs`, OTLP/HTTP with a JSON body; the resource's `service.name` is the source system) and the agent has a `syslog` source (UDP and TCP, RFC 3164, 5424 and 6587 framing). Both are judged by the same detection and rules as a file line and shown on the data map as seen through OpenTelemetry or syslog. See `docs/STREAMING_RECEIVERS.md`.
 
-## Unreleased (1.1.0)
+### Trust, visibility and prevention (the earlier part of this release)
 
 - **Evidence format (foundation for the trust features):** records written from now on use a defined, versioned format (`hash_version` 1, documented in `docs/EVIDENCE_FORMAT.md`) so that an independent program can check them; status changes and comments are recorded as events in the chain (who, when, from, to), and the status column is only a cache that the chain check recomputes. Existing records are never rehashed; the first new record continues the old chain. A database is migrated when the server starts, after a private copy is made in the `backups` folder. An older program refuses to start on migrated data (it cannot read the new records).
 - **Anchoring and a stand-alone verifier:** the server can write signed checkpoints of the evidence chain to witnesses it cannot alter (a file share, your SIEM over syslog), and `veritas-verify` checks an evidence export against them with no server and no network, naming the first broken record, a removed tail, a forged or missing checkpoint or a diverging witness. Off until configured (`docs/ANCHORING.md`). New API: `GET /v1/{org}/evidence/export`, `GET /v1/{org}/anchors`, `POST /v1/{org}/anchors/run`, `GET /v1/{org}/anchors/export` and `/pubkey`. The dashboard's health card shows Anchoring and a banner appears if witnessing falls behind. Releases include `veritas-verify` builds for Linux, macOS (Apple silicon) and Windows.
