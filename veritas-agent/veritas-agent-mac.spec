@@ -12,7 +12,7 @@ import os
 from PyInstaller.utils.hooks import collect_submodules
 
 # tail_docker() imports docker lazily, so PyInstaller cannot see it.
-hidden = collect_submodules('docker') + ['yaml', 'requests', 'urllib3', 'certifi']
+hidden = collect_submodules('docker') + ['yaml', 'requests', 'urllib3', 'certifi', 'veritas_recognizers']
 
 a = Analysis(
     ['agent.py'],

@@ -54,120 +54,61 @@ from __future__ import annotations
 
 from presidio_analyzer import Pattern, PatternRecognizer
 
-# ---------------------------------------------------------------------------
-# Aadhaar
-# ---------------------------------------------------------------------------
+import veritas_recognizers as shared
 
-AADHAAR_CONTEXT = ["aadhaar", "aadhar", "uid", "uidai"]
+# The patterns, scores and context words live in veritas_recognizers.RULES, the one definition the agent uses too
+# (docs/RECOGNIZERS.md). Presidio's recognizers below are built from it, so the two cannot drift apart.
 
-# Two patterns: spaced 4-4-4 groups (what our own generators emit), and a
-# bare unspaced 12-digit run (per the plan's "also handle unspaced" note).
-# Spaced pattern is given a higher base score since it's a much stronger
-# signal (order IDs, phone numbers etc. don't naturally appear as three
-# space-separated 4-digit groups).
-AADHAAR_PATTERNS = [
-    Pattern(
-        name="aadhaar_spaced",
-        regex=r"\b\d{4}\s\d{4}\s\d{4}\b",
-        score=0.75,
-    ),
-    Pattern(
-        name="aadhaar_unspaced_12digit",
-        regex=r"\b\d{12}\b",
-        score=0.4,  # lower base score — this is the collision-prone shape
-    ),
-]
+
+def _patterns(entity_type: str) -> list[Pattern]:
+    return [Pattern(name=r.name, regex=r.regex, score=r.score) for r in shared.RULES if r.entity_type == entity_type]
+
+
+def _context(entity_type: str) -> list[str]:
+    seen: list[str] = []
+    for r in shared.RULES:
+        if r.entity_type == entity_type:
+            seen.extend(w for w in r.context if w not in seen)
+    return seen
+
+
+AADHAAR_CONTEXT = _context(shared.IN_AADHAAR)
+AADHAAR_PATTERNS = _patterns(shared.IN_AADHAAR)
+PAN_CONTEXT = _context(shared.IN_PAN)
+PAN_PATTERNS = _patterns(shared.IN_PAN)
+PHONE_CONTEXT = _context(shared.IN_PHONE)
+PHONE_PATTERNS = _patterns(shared.IN_PHONE)
 
 
 class AadhaarRecognizer(PatternRecognizer):
     """
-    Detects Aadhaar numbers (India's 12-digit unique identity number).
-    Entity type: IN_AADHAAR.
-
-    Context words boost confidence when present nearby (Presidio's
-    context-enhancement mechanism) but do not suppress matches when
-    absent — see module docstring for the accepted trade-off.
+    Detects Aadhaar numbers (India's 12-digit unique identity number). Entity type: IN_AADHAAR.
+    Context words boost confidence when present nearby but do not suppress matches when absent — see the module
+    docstring for the accepted trade-off.
     """
 
     def __init__(self):
-        super().__init__(
-            supported_entity="IN_AADHAAR",
-            patterns=AADHAAR_PATTERNS,
-            context=AADHAAR_CONTEXT,
-            supported_language="en",
-        )
-
-
-# ---------------------------------------------------------------------------
-# PAN
-# ---------------------------------------------------------------------------
-
-PAN_CONTEXT = ["pan", "permanent account number", "income tax"]
-
-PAN_PATTERNS = [
-    Pattern(
-        name="pan_standard",
-        regex=r"\b[A-Z]{5}[0-9]{4}[A-Z]{1}\b",
-        score=0.85,  # highly distinctive shape, few real-world collisions
-    ),
-]
+        super().__init__(supported_entity="IN_AADHAAR", patterns=AADHAAR_PATTERNS, context=AADHAAR_CONTEXT,
+                         supported_language="en")
 
 
 class PANRecognizer(PatternRecognizer):
-    """
-    Detects Indian PAN (Permanent Account Number): 5 letters, 4 digits,
-    1 letter, exactly 10 characters. Entity type: IN_PAN.
-    """
+    """Detects Indian PAN: 5 letters, 4 digits, 1 letter, exactly 10 characters. Entity type: IN_PAN."""
 
     def __init__(self):
-        super().__init__(
-            supported_entity="IN_PAN",
-            patterns=PAN_PATTERNS,
-            context=PAN_CONTEXT,
-            supported_language="en",
-        )
-
-
-# ---------------------------------------------------------------------------
-# Indian Phone Number
-# ---------------------------------------------------------------------------
-
-PHONE_CONTEXT = ["phone", "mobile", "contact", "call", "number"]
-
-PHONE_PATTERNS = [
-    # +91 or 91 prefix, optional space/hyphen, then 10 digits starting 6-9
-    Pattern(
-        name="in_phone_with_prefix",
-        regex=r"\b(?:\+91[\s-]?|91[\s-]?)[6-9]\d{9}\b",
-        score=0.9,
-    ),
-    # Bare 10-digit Indian mobile shape (starts 6-9), no prefix.
-    # This is the shape Phase 2's fixtures.fake_phone() emits.
-    Pattern(
-        name="in_phone_bare",
-        regex=r"\b[6-9]\d{9}\b",
-        score=0.75,
-    ),
-]
+        super().__init__(supported_entity="IN_PAN", patterns=PAN_PATTERNS, context=PAN_CONTEXT,
+                         supported_language="en")
 
 
 class IndianPhoneRecognizer(PatternRecognizer):
     """
-    Detects Indian mobile phone numbers: 10 digits starting 6-9, with or
-    without +91/91 prefix, with or without separators. Entity type: IN_PHONE.
-
-    Deliberately does NOT match 12-digit runs (Aadhaar) or 10-digit runs
-    starting 0-5 (which are not valid Indian mobile prefixes) — this is
-    what keeps it from colliding with AadhaarRecognizer. Verified by test.
+    Detects Indian mobile numbers: 10 digits starting 6-9, with or without +91/91 prefix and separators.
+    Entity type: IN_PHONE. Deliberately does NOT match 12-digit runs (Aadhaar) or 10-digit runs starting 0-5.
     """
 
     def __init__(self):
-        super().__init__(
-            supported_entity="IN_PHONE",
-            patterns=PHONE_PATTERNS,
-            context=PHONE_CONTEXT,
-            supported_language="en",
-        )
+        super().__init__(supported_entity="IN_PHONE", patterns=PHONE_PATTERNS, context=PHONE_CONTEXT,
+                         supported_language="en")
 
 
 def get_custom_recognizers() -> list[PatternRecognizer]:

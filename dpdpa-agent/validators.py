@@ -27,113 +27,11 @@ import re
 from typing import Callable, Dict, Optional
 
 # ---------------------------------------------------------------------------
-# PAN — structural/positional validation only (no public checksum digit)
+# PAN (structure) and Aadhaar (Verhoeff checksum): the implementations are in veritas_recognizers.py, shared with
+# the agent, so there is one definition of each. Their documentation is there.
 # ---------------------------------------------------------------------------
 
-# 4th character of a PAN denotes the holder's category. This is public,
-# documented structure (Income Tax Department PAN format spec) — checking
-# it is still "structural correctness," not a checksum, since there is no
-# digit anywhere in a PAN whose value is mathematically derived from the
-# others.
-_PAN_HOLDER_TYPE_CODES = frozenset("ABCFGHLJPT")
-
-_PAN_PATTERN = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
-
-
-def is_valid_pan(value: str) -> bool:
-    """
-    PAN format: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).
-
-    IMPORTANT — this is NOT checksum validation. PAN has no public checksum
-    digit: the 4th character encodes holder type (P=Individual, C=Company,
-    H=HUF, A=AOP, B=BOI, G=Government, J=Artificial Judicial Person,
-    L=Local Authority, F=Firm, T=Trust) and the 5th character is typically
-    derived from the surname/entity name, neither of which is independently
-    re-derivable from the rest of the string the way a checksum digit is.
-    "Validation" here means structural/positional correctness: exact
-    length, exact letter/digit layout, and a recognized holder-type code
-    in position 4. A string can pass this check and still not be a real,
-    issued PAN — this function narrows false positives, it does not prove
-    authenticity.
-    """
-    if not isinstance(value, str):
-        return False
-    value = value.strip()
-    if not _PAN_PATTERN.match(value):
-        return False
-    return value[3] in _PAN_HOLDER_TYPE_CODES
-
-
-# ---------------------------------------------------------------------------
-# Aadhaar — Verhoeff checksum validation
-# ---------------------------------------------------------------------------
-
-# Verhoeff algorithm tables, reproduced directly (no third-party dependency).
-# Multiplication table (d): d[i][j] gives the group operation result.
-_VERHOEFF_D = (
-    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
-    (1, 2, 3, 4, 0, 6, 7, 8, 9, 5),
-    (2, 3, 4, 0, 1, 7, 8, 9, 5, 6),
-    (3, 4, 0, 1, 2, 8, 9, 5, 6, 7),
-    (4, 0, 1, 2, 3, 9, 5, 6, 7, 8),
-    (5, 9, 8, 7, 6, 0, 4, 3, 2, 1),
-    (6, 5, 9, 8, 7, 1, 0, 4, 3, 2),
-    (7, 6, 5, 9, 8, 2, 1, 0, 4, 3),
-    (8, 7, 6, 5, 9, 3, 2, 1, 0, 4),
-    (9, 8, 7, 6, 5, 4, 3, 2, 1, 0),
-)
-
-# Permutation table (p): p[i % 8][digit] permutes each digit by its position.
-_VERHOEFF_P = (
-    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
-    (1, 5, 7, 6, 2, 8, 3, 0, 9, 4),
-    (5, 8, 0, 3, 7, 9, 6, 1, 4, 2),
-    (8, 9, 1, 6, 0, 4, 3, 5, 2, 7),
-    (9, 4, 5, 3, 1, 2, 6, 8, 7, 0),
-    (4, 2, 8, 6, 5, 7, 3, 9, 0, 1),
-    (2, 7, 9, 3, 8, 0, 6, 4, 1, 5),
-    (7, 0, 4, 6, 9, 1, 3, 2, 5, 8),
-)
-
-# Inverse table — unused by pure validation (only needed to *generate* a
-# check digit) but included for completeness/reuse, e.g. a future
-# "generate a fixture Aadhaar" helper.
-_VERHOEFF_INV = (0, 4, 3, 2, 1, 5, 6, 7, 8, 9)
-
-
-def _verhoeff_is_valid(digits: str) -> bool:
-    """
-    Runs the Verhoeff checksum algorithm over a full digit string
-    (including its trailing check digit). Returns True iff the running
-    checksum reduces to 0, per the Verhoeff validation contract.
-    """
-    c = 0
-    for i, ch in enumerate(reversed(digits)):
-        c = _VERHOEFF_D[c][_VERHOEFF_P[i % 8][int(ch)]]
-    return c == 0
-
-
-def is_valid_aadhaar(value: str) -> bool:
-    """
-    Aadhaar format: 12 digits, first digit non-zero, with a Verhoeff
-    checksum embedded across all 12 digits (the 12th digit is the check
-    digit, but Verhoeff validates the whole string in one pass rather
-    than isolating "the last digit" arithmetically).
-
-    - Whitespace is stripped throughout (Aadhaar is conventionally shown
-      as three space-separated 4-digit groups, e.g. "XXXX XXXX XXXX").
-    - Rejects anything that isn't exactly 12 digits after stripping.
-    - Rejects a leading zero (Aadhaar numbers never start with 0).
-    - Returns True only if the Verhoeff checksum validates.
-    """
-    if not isinstance(value, str):
-        return False
-    stripped = re.sub(r"\s+", "", value)
-    if len(stripped) != 12 or not stripped.isdigit():
-        return False
-    if stripped[0] == "0":
-        return False
-    return _verhoeff_is_valid(stripped)
+from veritas_recognizers import _verhoeff_is_valid, is_valid_aadhaar, is_valid_pan  # noqa: E402,F401
 
 
 # ---------------------------------------------------------------------------

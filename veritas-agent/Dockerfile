@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY agent.py .
+COPY agent.py veritas_recognizers.py ./
 
 # Release version reported to the server (docker build --build-arg VERSION=1.0.18 ...)
 ARG VERSION=dev

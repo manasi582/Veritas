@@ -1,0 +1,269 @@
+{
+ "pack_version": "1.0.0",
+ "pack_fingerprint": "e8f56eec90188787",
+ "cases": [
+  {
+   "text": "customer verified with Aadhaar 2345 6789 0124 today",
+   "detections": [
+    {
+     "entity_type": "IN_AADHAAR",
+     "start": 31,
+     "end": 45,
+     "text": "2345 6789 0124",
+     "validation": "validated"
+    }
+   ],
+   "masked": "customer verified with Aadhaar [AADHAAR_REDACTED] today"
+  },
+  {
+   "text": "uid=234567890124 seen in debug",
+   "detections": [
+    {
+     "entity_type": "IN_AADHAAR",
+     "start": 4,
+     "end": 16,
+     "text": "234567890124",
+     "validation": "validated"
+    }
+   ],
+   "masked": "uid=[AADHAAR_REDACTED] seen in debug"
+  },
+  {
+   "text": "bad aadhaar 1234 5678 9012 should not be reported",
+   "detections": [],
+   "masked": "bad aadhaar 1234 5678 9012 should not be reported"
+  },
+  {
+   "text": "order 123456789012 shipped",
+   "detections": [],
+   "masked": "order 123456789012 shipped"
+  },
+  {
+   "text": "PAN ABCPE1234F on file",
+   "detections": [
+    {
+     "entity_type": "IN_PAN",
+     "start": 4,
+     "end": 14,
+     "text": "ABCPE1234F",
+     "validation": "validated"
+    }
+   ],
+   "masked": "PAN [PAN_REDACTED] on file"
+  },
+  {
+   "text": "pan-like string ABCDE1234F fails the structure check",
+   "detections": [
+    {
+     "entity_type": "IN_PAN",
+     "start": 16,
+     "end": 26,
+     "text": "ABCDE1234F",
+     "validation": "failed"
+    }
+   ],
+   "masked": "pan-like string [PAN_REDACTED] fails the structure check"
+  },
+  {
+   "text": "call 9876543210 now",
+   "detections": [
+    {
+     "entity_type": "IN_PHONE",
+     "start": 5,
+     "end": 15,
+     "text": "9876543210",
+     "validation": "none"
+    }
+   ],
+   "masked": "call [PHONE_REDACTED] now"
+  },
+  {
+   "text": "call +91 9876543210 now",
+   "detections": [
+    {
+     "entity_type": "IN_PHONE",
+     "start": 5,
+     "end": 19,
+     "text": "+91 9876543210",
+     "validation": "none"
+    }
+   ],
+   "masked": "call [PHONE_REDACTED] now"
+  },
+  {
+   "text": "contact 91-9876543210 or 919876543210",
+   "detections": [
+    {
+     "entity_type": "IN_PHONE",
+     "start": 8,
+     "end": 21,
+     "text": "91-9876543210",
+     "validation": "none"
+    },
+    {
+     "entity_type": "IN_PHONE",
+     "start": 25,
+     "end": 37,
+     "text": "919876543210",
+     "validation": "none"
+    }
+   ],
+   "masked": "contact [PHONE_REDACTED] or [PHONE_REDACTED]"
+  },
+  {
+   "text": "not a mobile 5876543210 or 98765 43210",
+   "detections": [],
+   "masked": "not a mobile 5876543210 or 98765 43210"
+  },
+  {
+   "text": "mail asha.rao@example.com and first+tag@sub.example.co.in",
+   "detections": [
+    {
+     "entity_type": "EMAIL_ADDRESS",
+     "start": 5,
+     "end": 25,
+     "text": "asha.rao@example.com",
+     "validation": "none"
+    },
+    {
+     "entity_type": "EMAIL_ADDRESS",
+     "start": 30,
+     "end": 57,
+     "text": "first+tag@sub.example.co.in",
+     "validation": "none"
+    }
+   ],
+   "masked": "mail [EMAIL_REDACTED] and [EMAIL_REDACTED]"
+  },
+  {
+   "text": "partial a@b is not an email",
+   "detections": [],
+   "masked": "partial a@b is not an email"
+  },
+  {
+   "text": "card 4111 1111 1111 1111 charged",
+   "detections": [
+    {
+     "entity_type": "CREDIT_CARD",
+     "start": 5,
+     "end": 24,
+     "text": "4111 1111 1111 1111",
+     "validation": "validated"
+    }
+   ],
+   "masked": "card [CARD_REDACTED] charged"
+  },
+  {
+   "text": "card 4111-1111-1111-1111 charged",
+   "detections": [
+    {
+     "entity_type": "CREDIT_CARD",
+     "start": 5,
+     "end": 24,
+     "text": "4111-1111-1111-1111",
+     "validation": "validated"
+    }
+   ],
+   "masked": "card [CARD_REDACTED] charged"
+  },
+  {
+   "text": "not a card 4111 1111 1111 1112",
+   "detections": [],
+   "masked": "not a card 4111 1111 1111 1112"
+  },
+  {
+   "text": "{\"phone\": \"9876543210\", \"email\": \"a.b@corp.org\", \"note\": \"ORD-431682\"}",
+   "detections": [
+    {
+     "entity_type": "IN_PHONE",
+     "start": 11,
+     "end": 21,
+     "text": "9876543210",
+     "validation": "none"
+    },
+    {
+     "entity_type": "EMAIL_ADDRESS",
+     "start": 34,
+     "end": 46,
+     "text": "a.b@corp.org",
+     "validation": "none"
+    }
+   ],
+   "masked": "{\"phone\": \"[PHONE_REDACTED]\", \"email\": \"[EMAIL_REDACTED]\", \"note\": \"ORD-431682\"}"
+  },
+  {
+   "text": "hashed id hcid_d8ba0b4b and order ORD-431682 only",
+   "detections": [],
+   "masked": "hashed id hcid_d8ba0b4b and order ORD-431682 only"
+  },
+  {
+   "text": "mixed: 9876543210, ABCPE1234F, 2345 6789 0124, x.y@example.com, 4111111111111111",
+   "detections": [
+    {
+     "entity_type": "IN_PHONE",
+     "start": 7,
+     "end": 17,
+     "text": "9876543210",
+     "validation": "none"
+    },
+    {
+     "entity_type": "IN_PAN",
+     "start": 19,
+     "end": 29,
+     "text": "ABCPE1234F",
+     "validation": "validated"
+    },
+    {
+     "entity_type": "IN_AADHAAR",
+     "start": 31,
+     "end": 45,
+     "text": "2345 6789 0124",
+     "validation": "validated"
+    },
+    {
+     "entity_type": "EMAIL_ADDRESS",
+     "start": 47,
+     "end": 62,
+     "text": "x.y@example.com",
+     "validation": "none"
+    },
+    {
+     "entity_type": "CREDIT_CARD",
+     "start": 64,
+     "end": 80,
+     "text": "4111111111111111",
+     "validation": "validated"
+    }
+   ],
+   "masked": "mixed: [PHONE_REDACTED], [PAN_REDACTED], [AADHAAR_REDACTED], [EMAIL_REDACTED], [CARD_REDACTED]"
+  },
+  {
+   "text": "unicode नमस्ते 9876543210 ok",
+   "detections": [
+    {
+     "entity_type": "IN_PHONE",
+     "start": 15,
+     "end": 25,
+     "text": "9876543210",
+     "validation": "none"
+    }
+   ],
+   "masked": "unicode नमस्ते [PHONE_REDACTED] ok"
+  },
+  {
+   "text": "",
+   "detections": [],
+   "masked": ""
+  },
+  {
+   "text": "   ",
+   "detections": [],
+   "masked": "   "
+  },
+  {
+   "text": "nothing sensitive in this line at all",
+   "detections": [],
+   "masked": "nothing sensitive in this line at all"
+  }
+ ]
+}
