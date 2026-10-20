@@ -83,10 +83,16 @@
       display: none;
     }
   </style>
+  <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/img/veritas-logo-32.png" />
+  <link rel="apple-touch-icon" href="/static/img/veritas-logo-180.png" />
+  <meta name="theme-color" content="#1e1e1e" />
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('veritas_theme')||'light'}catch(e){}</script>
+  <link rel="stylesheet" href="/static/css/veritas-auth.css" />
 </head>
 <body>
   <div class="card">
-    <div class="logo">VERITAS</div>
+    <div class="brandmark"><img src="/static/img/veritas-logo-64.png" srcset="/static/img/veritas-logo-64.png 1x, /static/img/veritas-logo-192.png 3x" alt="" width="44" height="44" /><div class="logo">VERITAS</div></div>
     <div class="subtitle">DPDPA Compliance Platform — Sign In</div>
 
     <div class="error" id="errorBox"></div>

@@ -55,6 +55,7 @@ Step-by-step guides:
 | [docs/STREAMING_RECEIVERS.md](docs/STREAMING_RECEIVERS.md) | OpenTelemetry logs and syslog as ways in, besides files |
 | [docs/NOTICE_REGISTRY.md](docs/NOTICE_REGISTRY.md) | Which privacy notices cover the data declared and observed (coverage, not adequacy), with `NOTICE_001` |
 | [docs/RETENTION_REVIEW.md](docs/RETENTION_REVIEW.md) | Declared retention periods against what is still seen, with warnings and owner tasks (never deletes anything) |
+| [docs/MAC_FEATURE_TEST_CHECKLIST.md](docs/MAC_FEATURE_TEST_CHECKLIST.md) | Install a fresh package on a Mac and test every feature, step by step |
 | [docs/RULES.md](docs/RULES.md) | The six rules, overlays, exceptions, approvals and "why did this fire" |
 | [docs/RULES_STATUS.md](docs/RULES_STATUS.md) | What was built of the rules plan, and its limits |
 | [docs/RULES_PLAN.md](docs/RULES_PLAN.md) | The plan for configurable rules with guardrails |

@@ -1,9 +1,13 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Veritas — DPDPA Compliance Dashboard</title>
+  <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/img/veritas-logo-32.png" />
+  <link rel="apple-touch-icon" href="/static/img/veritas-logo-180.png" />
+  <meta name="theme-color" content="#1e1e1e" />
   <meta name="description" content="Real-time, multi-tenant DPDPA compliance monitoring. Live findings feed, tamper-evident evidence store, and auditor-grade remediation tracking." />
   
   <!-- jsPDF — served locally from /static/js/ (no CDN, works offline/air-gapped) -->
@@ -1499,6 +1503,7 @@
     ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--text-subtle); }
   </style>
+  <link rel="stylesheet" href="/static/css/veritas-skin.css" />
 </head>
 <body>
 
@@ -1508,7 +1513,7 @@
   <aside class="sidebar">
     <div class="brand">
       <div class="logo-icon">
-        <svg viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2z"/></svg>
+        <img src="/static/img/veritas-logo-64.png" srcset="/static/img/veritas-logo-64.png 1x, /static/img/veritas-logo-192.png 3x" alt="Veritas" width="38" height="38" />
       </div>
       <div>
         <div class="brand-title">VERITAS</div>
@@ -2534,7 +2539,7 @@
 })();
 
 // ---- Theme Management ----
-let currentTheme = localStorage.getItem('veritas_theme') || 'dark';
+let currentTheme = localStorage.getItem('veritas_theme') || 'light';
 
 function applyTheme(theme) {
   currentTheme = theme;

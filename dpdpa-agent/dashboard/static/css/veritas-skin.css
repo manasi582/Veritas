@@ -1,0 +1,268 @@
+/*
+  Veritas skin: the colours and shapes of the product's design template.
+  Palette: Sun Glare (lime), Exuberant Orange, Blue Violet, Cloud Dancer (cream), Darkest Hour (near black).
+  It only overrides the theme variables and the look of cards, pills, navigation and tables. No markup, id or handler is changed.
+*/
+:root {
+  --vt-lime: #d8ff00;
+  --vt-lime-ink: #5d7300;
+  --vt-orange: #ff5722;
+  --vt-violet: #6b5bc7;
+  --vt-violet-soft: #8c7fe6;
+  --vt-cream: #f1efea;
+  --vt-ink: #1e1e1e;
+  --vt-page: #cdc9e0;
+}
+
+/* ---------- light (the default) ---------- */
+:root, [data-theme="light"] {
+  --bg: var(--vt-cream);
+  --canvas: var(--vt-cream);
+  --sidebar: transparent;
+  --surface: #ffffff;
+  --surface-hover: #f4f2ee;
+  --surface-active: #e9e6df;
+  --border: rgba(30, 30, 30, 0.08);
+  --border-strong: rgba(30, 30, 30, 0.16);
+  --border-subtle: rgba(30, 30, 30, 0.05);
+  --shadow-border: 0 0 0 1px var(--border);
+  --shadow-border-strong: 0 0 0 1px var(--border-strong);
+  --shadow-card: 0 1px 2px rgba(30,30,30,.05), 0 10px 28px -14px rgba(30,30,30,.18);
+  --shadow-dropdown: 0 0 0 1px rgba(30,30,30,.1), 0 18px 40px -8px rgba(30,30,30,.2);
+  --text: var(--vt-ink);
+  --text-headings: #111111;
+  --text-muted: #6a6862;
+  --text-subtle: #9a978f;
+  --text-inverse: #ffffff;
+  --btn-primary-bg: var(--vt-ink);
+  --btn-primary-text: #ffffff;
+  --btn-primary-hover: #000000;
+  --drawer-bg: #ffffff;
+  --modal-bg: #ffffff;
+  --input-bg: #f7f6f2;
+  --track-bg: rgba(30, 30, 30, 0.07);
+  --code-bg: #f4f2ee;
+  --accent: var(--vt-ink);
+  --accent-blue: var(--vt-violet);
+  --accent-blue-hover: #5849b5;
+  --accent-blue-glow: rgba(107, 91, 199, 0.16);
+  --high: var(--vt-orange);
+  --high-bg: rgba(255, 87, 34, 0.10);
+  --high-border: rgba(255, 87, 34, 0.30);
+  --medium: var(--vt-violet);
+  --medium-bg: rgba(107, 91, 199, 0.10);
+  --medium-border: rgba(107, 91, 199, 0.28);
+  --low: var(--vt-lime-ink);
+  --low-bg: rgba(216, 255, 0, 0.45);
+  --low-border: rgba(150, 180, 0, 0.45);
+  --breach: var(--vt-orange);
+  --purple: var(--vt-violet);
+  --purple-bg: rgba(107, 91, 199, 0.10);
+  --radius-lg: 20px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+  --radius-xs: 8px;
+  --vt-page-bg: var(--vt-page);
+  --vt-nav-active-bg: var(--vt-ink);
+  --vt-nav-active-text: #ffffff;
+  --vt-nav-active-dot: var(--vt-lime);
+}
+
+/* ---------- dark: Darkest Hour with lime accents ---------- */
+[data-theme="dark"] {
+  --bg: #1e1e1e;
+  --canvas: #1e1e1e;
+  --sidebar: transparent;
+  --surface: #292929;
+  --surface-hover: #323232;
+  --surface-active: #3b3b3b;
+  --border: rgba(241, 239, 234, 0.09);
+  --border-strong: rgba(241, 239, 234, 0.18);
+  --border-subtle: rgba(241, 239, 234, 0.05);
+  --shadow-border: 0 0 0 1px var(--border);
+  --shadow-border-strong: 0 0 0 1px var(--border-strong);
+  --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 12px 30px -14px rgba(0,0,0,.6);
+  --shadow-dropdown: 0 0 0 1px rgba(241,239,234,.12), 0 18px 40px -8px rgba(0,0,0,.7);
+  --text: #ece9e2;
+  --text-headings: #ffffff;
+  --text-muted: #a5a29a;
+  --text-subtle: #75726b;
+  --text-inverse: #1e1e1e;
+  --btn-primary-bg: var(--vt-lime);
+  --btn-primary-text: #1e1e1e;
+  --btn-primary-hover: #c2e600;
+  --drawer-bg: #242424;
+  --modal-bg: #242424;
+  --input-bg: #1e1e1e;
+  --track-bg: rgba(241, 239, 234, 0.08);
+  --code-bg: #1a1a1a;
+  --accent: var(--vt-lime);
+  --accent-blue: var(--vt-violet-soft);
+  --accent-blue-hover: #a094f0;
+  --accent-blue-glow: rgba(140, 127, 230, 0.2);
+  --high: #ff6f45;
+  --high-bg: rgba(255, 87, 34, 0.16);
+  --high-border: rgba(255, 87, 34, 0.38);
+  --medium: #a89cf0;
+  --medium-bg: rgba(140, 127, 230, 0.16);
+  --medium-border: rgba(140, 127, 230, 0.36);
+  --low: var(--vt-lime);
+  --low-bg: rgba(216, 255, 0, 0.12);
+  --low-border: rgba(216, 255, 0, 0.32);
+  --breach: #ff6f45;
+  --purple: #a89cf0;
+  --purple-bg: rgba(140, 127, 230, 0.16);
+  --vt-page-bg: #0e0e0f;
+  --vt-nav-active-bg: var(--vt-lime);
+  --vt-nav-active-text: #1e1e1e;
+  --vt-nav-active-dot: #1e1e1e;
+}
+
+/* ---------- the floating panel ---------- */
+html, body { background: var(--vt-page-bg); }
+body { letter-spacing: -0.006em; }
+.app-container {
+  flex-direction: column;
+  width: auto;
+  max-width: 1560px;
+  height: calc(100vh - 28px);
+  margin: 14px auto;
+  padding: 18px 24px 16px;
+  background: var(--bg);
+  border-radius: 28px;
+  box-shadow: 0 30px 70px -30px rgba(30, 30, 40, 0.45);
+  overflow: hidden;
+}
+@media (max-width: 900px) {
+  .app-container { margin: 0; height: 100vh; border-radius: 0; padding: 12px; }
+}
+
+/* ---------- header: logo, pill navigation, version ---------- */
+.sidebar {
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 18px;
+  padding: 0 0 14px;
+  background: transparent;
+  border-right: 0;
+}
+.brand { padding: 0; border: 0; margin: 0; gap: 11px; flex: 0 0 auto; }
+.brand .logo-icon { width: 38px; height: 38px; background: transparent; border-radius: 11px; box-shadow: none; overflow: hidden; }
+.brand .logo-icon img { width: 100%; height: 100%; display: block; }
+.brand-title { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.brand-sub { font-size: 9.5px; letter-spacing: 0.08em; }
+.nav-label { display: none; }
+.nav-menu {
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px;
+}
+.nav-menu::-webkit-scrollbar { display: none; }
+.nav-item {
+  flex: 0 0 auto;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.nav-item:hover { background: var(--surface-active); color: var(--text-headings); }
+.nav-item.active { background: var(--vt-nav-active-bg); color: var(--vt-nav-active-text); box-shadow: none; }
+.nav-item.active .nav-icon { color: var(--vt-nav-active-dot); opacity: 1; }
+.nav-icon { width: 14px; height: 14px; opacity: 0.7; }
+.sidebar-footer { padding: 0; border: 0; flex: 0 0 auto; }
+.env-badge { padding: 6px 12px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-border); }
+.env-badge .dot { background: var(--vt-lime); box-shadow: 0 0 0 2px var(--vt-ink); }
+
+/* ---------- second row: page title and actions ---------- */
+.main-wrapper { background: transparent; min-height: 0; }
+.topbar {
+  height: auto;
+  padding: 2px 0 14px;
+  border: 0;
+  background: transparent;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.topbar-breadcrumb { display: none; }
+.topbar-title { font-size: 24px; font-weight: 750; letter-spacing: -0.03em; }
+.topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+.license-badge { border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-border); }
+.org-selector-wrap select, .theme-toggle-btn, .header-status { border-radius: 999px; background-color: var(--surface); }
+.theme-toggle-btn { width: 34px; height: 34px; }
+.page-content { padding: 0 2px 6px 0; }
+.page-section { max-width: none; gap: 16px; }
+
+/* ---------- cards ---------- */
+.stat-card, .table-container, .integrity-panel, .kpi-card, .flow-panel, .policy-card, .panel, .card {
+  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+.stat-card { padding: 18px 20px; }
+.stat-card .label { font-size: 11.5px; font-weight: 600; color: var(--text-muted); letter-spacing: 0; text-transform: none; }
+.stat-card .value { font-size: 34px; font-weight: 750; letter-spacing: -0.035em; }
+.stat-card .value.high, .stat-card .value.breach { color: var(--vt-orange); }
+.section-header h2 { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
+
+/* ---------- buttons and segmented toggles are pills ---------- */
+.btn { border-radius: 999px; font-weight: 600; }
+.btn-primary { background: var(--btn-primary-bg); color: var(--btn-primary-text); box-shadow: none; }
+.btn-primary:hover { background: var(--btn-primary-hover); }
+.btn-secondary { background: var(--surface); box-shadow: var(--shadow-border-strong); color: var(--text-headings); }
+.btn-secondary:hover { background: var(--surface-hover); }
+.btn-verify { background: var(--vt-lime); color: #1e1e1e; box-shadow: none; }
+.btn-verify:hover { background: #c6eb00; }
+.btn-verify svg { stroke: #1e1e1e; }
+.btn-warn { background: var(--vt-orange); color: #fff; box-shadow: none; }
+.btn-danger { border-radius: 999px; }
+#viewIncidents.btn, #viewVerdicts.btn { background: transparent; box-shadow: none; color: var(--text-muted); }
+#viewIncidents.active, #viewVerdicts.active, #viewIncidents[aria-pressed="true"], #viewVerdicts[aria-pressed="true"] { background: var(--vt-ink); color: #fff; }
+
+/* ---------- badges ---------- */
+.badge, .status-badge { border-radius: 999px; font-weight: 700; letter-spacing: 0.02em; }
+.badge.HIGH { background: var(--vt-orange); color: #fff; box-shadow: none; }
+[data-theme="dark"] .badge.HIGH { background: rgba(255, 87, 34, 0.22); color: #ff8a66; box-shadow: 0 0 0 1px rgba(255,87,34,.4); }
+.badge.MEDIUM { background: var(--vt-violet); color: #fff; box-shadow: none; }
+[data-theme="dark"] .badge.MEDIUM { background: rgba(140,127,230,.22); color: #b9afff; box-shadow: 0 0 0 1px rgba(140,127,230,.4); }
+.badge.LOW { background: var(--vt-lime); color: #1e1e1e; box-shadow: none; }
+[data-theme="dark"] .badge.LOW { background: rgba(216,255,0,.16); color: var(--vt-lime); box-shadow: 0 0 0 1px rgba(216,255,0,.35); }
+.badge.rule, .badge.system { border-radius: 999px; }
+.status-badge.OPEN { background: var(--high-bg); color: var(--vt-orange); box-shadow: 0 0 0 1px var(--high-border); }
+.status-badge.ACKNOWLEDGED { background: var(--medium-bg); color: var(--medium); box-shadow: 0 0 0 1px var(--medium-border); }
+.status-badge.RESOLVED { background: var(--vt-lime); color: #1e1e1e; box-shadow: none; }
+[data-theme="dark"] .status-badge.RESOLVED { background: rgba(216,255,0,.16); color: var(--vt-lime); box-shadow: 0 0 0 1px rgba(216,255,0,.35); }
+
+/* ---------- tables ---------- */
+.table-wrap { border-radius: var(--radius-lg); }
+th { font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; color: var(--text-subtle); }
+tbody tr:hover td { background: var(--surface-hover); }
+
+/* ---------- forms ---------- */
+input[type="text"], input[type="search"], input[type="date"], input[type="number"], input[type="password"], input[type="email"], select, textarea {
+  border-radius: 12px;
+}
+
+/* ---------- drawer and modals ---------- */
+.drawer { border-radius: 24px 0 0 24px; }
+.modal, .modal-content { border-radius: 24px; }
+
+/* ---------- refinements ---------- */
+.env-badge { white-space: nowrap; gap: 10px; }
+.sidebar-footer { min-width: max-content; }
+div:has(> #viewIncidents) { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-border); }
+#viewIncidents.btn, #viewVerdicts.btn { border-radius: 999px; }
+#viewIncidents.active, #viewVerdicts.active { background: var(--vt-nav-active-bg); color: var(--vt-nav-active-text); }
+.table-wrap { background: var(--surface); box-shadow: var(--shadow-card); }
+.table-container .table-wrap { box-shadow: none; }
+.table-container { overflow: hidden; }
+.health-item, .health-card, .health-grid > div { border-radius: 14px; }

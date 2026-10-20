@@ -1,0 +1,16 @@
+/* Sign-in and first-run pages in the Veritas skin (see veritas-skin.css for the palette). */
+:root { --a-page: #cdc9e0; --a-card: #f1efea; --a-ink: #1e1e1e; --a-muted: #6a6862; --a-field: #ffffff; --a-line: rgba(30,30,30,.14); --a-lime: #d8ff00; --a-orange: #ff5722; }
+[data-theme="dark"] { --a-page: #0e0e0f; --a-card: #1e1e1e; --a-ink: #f1efea; --a-muted: #a5a29a; --a-field: #292929; --a-line: rgba(241,239,234,.16); }
+body { background: var(--a-page) !important; color: var(--a-ink) !important; }
+.card { background: var(--a-card) !important; border: 0 !important; border-radius: 28px !important; padding: 2.4rem !important;
+        box-shadow: 0 30px 70px -30px rgba(30,30,40,.5) !important; }
+.brandmark { display: flex; align-items: center; gap: 12px; margin-bottom: .35rem; }
+.brandmark img { width: 44px; height: 44px; border-radius: 12px; display: block; }
+.logo { color: var(--a-ink) !important; font-size: 1.25rem !important; font-weight: 750 !important; letter-spacing: -.03em !important; margin: 0 !important; }
+.subtitle { color: var(--a-muted) !important; margin-bottom: 1.6rem !important; }
+label { color: var(--a-muted) !important; font-weight: 600 !important; }
+input, select { background: var(--a-field) !important; color: var(--a-ink) !important; border: 1px solid var(--a-line) !important; border-radius: 14px !important; padding: .75rem 1rem !important; }
+input:focus, select:focus { border-color: var(--a-ink) !important; box-shadow: 0 0 0 3px rgba(107,91,199,.22) !important; }
+.btn { background: var(--a-ink) !important; color: #fff !important; border-radius: 999px !important; padding: .8rem 1rem !important; font-weight: 650 !important; }
+[data-theme="dark"] .btn { background: var(--a-lime) !important; color: #1e1e1e !important; }
+.error { background: rgba(255,87,34,.1) !important; border: 1px solid rgba(255,87,34,.35) !important; color: var(--a-orange) !important; border-radius: 14px !important; }
