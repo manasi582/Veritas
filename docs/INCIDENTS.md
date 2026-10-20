@@ -76,5 +76,6 @@ Findings stored before this release are grouped on the first start, in the backg
 
 - A template that is too loose merges unrelated problems; too tight splits one problem in many. That is why split and merge exist.
 - The template keeps short lower-case words. A personal name the detector missed, written in lower case on its own, would stay in it. The template is shown to staff in the dashboard and is never sent anywhere.
+- Grouping follows what the detector reads. If it takes a number in a line for a phone number on some lines and not on others, those lines get a different template and a different incident (in the CI scenario, 6,039 findings from four kinds of line became 13 incidents: four large ones and a few small ones). Split and merge exist for this.
 - Lines that are structurally the same but whose only difference is wording (a changed message text) are different incidents.
 - Cost: grouping adds a few microseconds to the template and three small writes to storing a finding; measured on a laptop, storing 12,000 findings ran at about 4,800 per second with grouping against about 6,400 without (detection, at about 90 to 300 events a second, is the limit, not storing).

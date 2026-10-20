@@ -85,9 +85,9 @@
 >
 > *(Narrator)* Here is what those twelve thousand were: one debug line, written months ago by Arjun, who needed to see why a payment was slow. It prints the customer's phone number every time it runs.
 
-*(Demo: the Audit Ledger. The summary line reads "12,000 findings → 9 incidents". Point at the owner on each row and the sparkline.)*
+*(Demo: the Audit Ledger. The summary line reads "12,000 findings → about a dozen incidents" (say the number you see in rehearsal). Point at the owner on each row and the sparkline.)*
 
-> *(Meera)* Nine problems. Each with an owner. This one belongs to Arjun's team. I send it to him with the place in the code.
+> *(Meera)* A dozen problems, not twelve thousand. Each with an owner. This one belongs to Arjun's team. I send it to him with the place in the code.
 >
 > *(Arjun, briefly)* Fixed. Marked resolved.
 >

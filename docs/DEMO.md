@@ -29,8 +29,8 @@ A 15-minute walk through five features in the order that tells the story. Each m
 
 ## 2. Visibility: 12,000 findings become a short list (3 min)
 
-- **Do:** *Audit Ledger* opens on incidents. Point at the summary line (**12,000+ findings → 9 incidents**), the owning team on each row, the 24-hour sparkline. Expand one: the findings are all there; click *Details* on one. Switch to *All findings* to show nothing was removed. Then **Acknowledge**, **Resolve**, and append the recurrence line to the noisy log (`cat /tmp/demo-logs/recurrence.log >> /tmp/demo-logs/noisy-service.log`). After the grace period (1 hour by default; set `VERITAS_INCIDENT_GRACE_SECONDS=30` for the demo) the incident **reopens as recurred**.
-- **Say:** "One debug statement used to mean twelve thousand rows for a person to wade through. It is nine problems, each with an owner. And if a fix does not hold, Veritas tells you."
+- **Do:** *Audit Ledger* opens on incidents. Point at the summary line (**about 12,000 findings → a short list of incidents**: nine with a clean run, a few more if the detector mistakes some numbers in the lines for phone numbers, as it did in the CI run: 6,039 findings became 13), the owning team on each row, the 24-hour sparkline. Expand one: the findings are all there; click *Details* on one. Switch to *All findings* to show nothing was removed. Then **Acknowledge**, **Resolve**, and append the recurrence line to the noisy log (`cat /tmp/demo-logs/recurrence.log >> /tmp/demo-logs/noisy-service.log`). After the grace period (1 hour by default; set `VERITAS_INCIDENT_GRACE_SECONDS=30` for the demo) the incident **reopens as recurred**.
+- **Say:** "One debug statement used to mean twelve thousand rows for a person to wade through. It is a dozen problems at most, each with an owner. And if a fix does not hold, Veritas tells you."
 - **Do not say:** that the grouping is perfect. If asked: "A template that is too loose merges two problems; you can split and merge, and both are recorded."
 
 ## 3. The data map: who handles what, against the policy (2 min)
@@ -59,7 +59,7 @@ A 15-minute walk through five features in the order that tells the story. Each m
 
 ## If something does not go to plan
 
-- The noisy log produces many more or fewer than 9 incidents: the demo lines are generated from nine templates; if you edited them, the count follows.
+- The noisy log produces more or fewer incidents than you said: the sample lines come from nine kinds of line, and the real detector sometimes reads a number in a line (a tenant or batch number) as a phone number, which gives that line its own incident. Say "a short list", not an exact number, and check the count in a rehearsal.
 - *Recurred* does not appear: the grace period has not passed (`VERITAS_INCIDENT_GRACE_SECONDS`).
 - `ERASURE_001` does not appear: the request must be **closed** (every task confirmed) and it must be an *erasure* request.
 - The verifier says `CHECKPOINT_GAP` or `UNANCHORED_TAIL` before the tamper: take a checkpoint first (`POST /v1/demo_corp/anchors/run`, or wait the interval) so the latest records are covered.
