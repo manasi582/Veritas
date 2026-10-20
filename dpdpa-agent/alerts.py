@@ -282,6 +282,30 @@ def current_problems() -> Dict[str, str]:
             problems["disk_low"] = f"Only {pct:.0f}% of the disk is free ({u.free / 1e9:.1f} GB). Free space or move the data."
     except Exception as e:
         logger.debug("alert check: disk status unavailable: %s", e)
+    try:    # retention: declared periods that have run out (or will soon) for data that is still being seen
+        from config_loader import load_org_config
+        from evidence_store.store import get_store
+        from retention_review import review as _retention
+        store = get_store()
+        for org in store.tenants():
+            try:
+                cfg = load_org_config(org)
+            except Exception:
+                continue
+            found = _retention.review(store, org, cfg)
+            over = [i for i in found["items"] if i["status"] == _retention.OVERDUE]
+            soon = [i for i in found["items"] if i["status"] == _retention.DUE_SOON]
+            if over:
+                problems[f"retention_overdue_{org}"] = (
+                    f"{org}: {len(over)} declared retention period(s) have run out and data of that kind is still being seen: "
+                    + ", ".join(sorted({f"{i['system']} ({i['field']})" for i in over})[:8])
+                    + ". Open the Retention panel on the Data map and ask each owner to confirm.")
+            if soon:
+                problems[f"retention_due_soon_{org}"] = (
+                    f"{org}: {len(soon)} declared retention period(s) run out within {found['settings']['warn_days']} days: "
+                    + ", ".join(sorted({f"{i['system']} ({i['field']})" for i in soon})[:8]) + ".")
+    except Exception as e:
+        logger.debug("alert check: retention status unavailable: %s", e)
     return problems
 
 

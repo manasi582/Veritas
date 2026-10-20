@@ -69,6 +69,7 @@ ROLE_ORDER = [VIEWER, AUDITOR, COMPLIANCE_ADMIN, SUPER_ADMIN]
 
 MUTATING_MIN_ROLE = {
     ("POST", "/v1/{org_id}/anchors/run"):                    COMPLIANCE_ADMIN,
+    ("POST", "/v1/{org_id}/retention/tasks"):                COMPLIANCE_ADMIN,
     ("POST", "/v1/{org_id}/subjects/lookup"):                COMPLIANCE_ADMIN,
     ("POST", "/v1/{org_id}/requests"):                       COMPLIANCE_ADMIN,
     ("POST", "/v1/{org_id}/requests/{request_id}/tasks/{system}/confirm"): COMPLIANCE_ADMIN,

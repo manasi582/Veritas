@@ -2080,7 +2080,14 @@
           <div class="table-container" style="flex:1 1 560px;min-width:320px;padding:8px;"><svg id="flowSvg" width="100%" height="320" role="img" aria-label="Systems and the kinds of personal data observed in them"></svg></div>
           <div class="table-container" style="flex:0 1 380px;min-width:280px;padding:14px;" id="flowPanel"><div style="color:var(--text-muted);font-size:13px;">Select a system to see what was observed there.</div></div>
         </div>
-      <div class="table-container" style="margin-top:14px;padding:14px;" id="schemaPanel">
+      <div class="table-container" style="margin-top:14px;padding:14px;" id="retentionPanel">
+          <h3 style="margin:0 0 4px;font-size:15px;">Retention review</h3>
+          <div class="inc-hint" id="retentionNote" style="margin-bottom:8px;"></div>
+          <table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="text-align:left;color:var(--text-muted)">
+            <th>System</th><th>Field</th><th>Period</th><th>Runs out</th><th>Status</th><th>Last seen</th><th></th></tr></thead>
+            <tbody id="retentionTbody"><tr><td colspan="7" class="inc-hint">Loading…</td></tr></tbody></table>
+        </div>
+        <div class="table-container" style="margin-top:14px;padding:14px;" id="schemaPanel">
           <h3 style="margin:0 0 4px;font-size:15px;">Database schema changes</h3>
           <div class="inc-hint" id="schemaNote" style="margin-bottom:8px;"></div>
           <table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="text-align:left;color:var(--text-muted)">
@@ -3054,9 +3061,41 @@ async function loadFlows() {
       (flowData.observing_since ? ` Counting since ${new Date(flowData.observing_since).toLocaleString()}.` : ' Nothing has been counted yet.');
     renderFlowMap();
     loadSchemaChanges();
+    loadRetention();
   } catch (e) {
     showToast('Failed to load the data map', 'error');
   }
+}
+
+const RETENTION_COLOR = { 'overdue': 'var(--high)', 'due soon': 'var(--medium)', 'within': 'var(--low)', 'past, not seen': 'var(--text-muted)', 'not observed': 'var(--text-muted)' };
+
+async function loadRetention() {
+  try {
+    const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/retention`, { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('retentionNote').textContent = d.note || '';
+    const tb = document.getElementById('retentionTbody');
+    if (!d.items.length) { tb.innerHTML = '<tr><td colspan="7" class="inc-hint">The policy declares no fields yet.</td></tr>'; return; }
+    tb.innerHTML = d.items.map(i => {
+      const color = RETENTION_COLOR[i.status] || 'var(--text-muted)';
+      const left = i.days_left === null ? '' : (i.days_left < 0 ? ` (${-i.days_left} days ago)` : ` (in ${i.days_left} days)`);
+      const task = i.task_request_id ? '<span class="inc-hint">task open</span>' :
+        (['overdue', 'due soon'].includes(i.status) ? `<span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN"><button class="btn btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="openRetentionTask('${safeId(i.system)}')">Open task</button></span>` : '');
+      return `<tr><td>${escapeHtml(i.system)}</td><td class="mono">${escapeHtml(i.field)}</td><td>${Number(i.retention_days)} days</td>
+        <td>${i.due_at ? escapeHtml(new Date(i.due_at).toLocaleDateString()) + escapeHtml(left) : '—'}<div class="inc-hint">${escapeHtml(i.clock_source || '')}</div></td>
+        <td style="color:${color}">${escapeHtml(i.status)}</td><td>${i.last_seen ? escapeHtml(new Date(i.last_seen).toLocaleDateString()) : '—'}</td><td>${task}</td></tr>`;
+    }).join('');
+    if (window.__veritasRole) applyRoleUI(window.__veritasRole);
+  } catch (e) { /* secondary panel */ }
+}
+
+async function openRetentionTask(system) {
+  const r = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/retention/tasks`, {
+    method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({systems: [system]}) });
+  if (!r.ok) { showToast((await r.json()).detail || 'Could not open the task', 'error'); return; }
+  showToast('Task opened: the owner confirms it under Rights requests', 'success');
+  loadRetention();
 }
 
 async function loadSchemaChanges() {

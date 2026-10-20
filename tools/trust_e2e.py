@@ -246,11 +246,14 @@ class E2E:
         fields = lambda system, cat: [{"field_name": f"{cat}_field", "pii_category": cat, "declared_purpose": "service",
                                        "consent_scope": "service", "retention_days": 365, "source_system": system}]
         cfg = {"org_id": ORG, "fields": fields("order-service", "phone") + fields("support-ticketing", "phone") +
-                                        fields("marketing-service", "phone") + fields("noisy-service", "phone"),
+                                        fields("marketing-service", "phone") + fields("noisy-service", "phone") +
+                                        [{"field_name": "phone", "pii_category": "phone", "declared_purpose": "service", "consent_scope": "service",
+                                          "retention_days": 30, "source_system": "retention-demo", "data_since": "2025-01-01"}],
                "owners": {"order-service": {"team": "Orders", "email": "orders@e2e.test", "slack_channel": "#orders"},
                           "support-ticketing": {"team": "Support", "email": "support@e2e.test"},
                           "marketing-service": {"team": "Marketing", "email": "marketing@e2e.test"},
-                          "noisy-service": {"team": "Platform", "email": "platform@e2e.test"}}}
+                          "noisy-service": {"team": "Platform", "email": "platform@e2e.test"},
+                          "retention-demo": {"team": "Data", "email": "data@e2e.test"}}}
         check(self.post(self.admins, f"/v1/orgs/{ORG}/config", json=cfg).json().get("status") == "ok", "the organization was not accepted")
         other = {"org_id": OTHER, "fields": fields("billing", "phone")}
         check(self.post(self.admins, f"/v1/orgs/{OTHER}/config", json=other).json().get("status") == "ok", "the second organization was not accepted")
@@ -392,6 +395,25 @@ class E2E:
         gate = subprocess.run([sys.executable, str(ROOT / "veritas-sdk" / "python" / "veritas_gate.py"), str(spec)], capture_output=True, text=True)
         check(gate.returncode == 1 and PHONE not in gate.stdout, "the pipeline gate did not fail on personal data in an example")
         tap.close()
+
+        step("retention review (R7): a declared period has run out, data is still seen, the owner confirms, and it shows if the data keeps coming")
+        send_retention = lambda: requests.post(f"{self.base}/v1/{ORG}/events", headers={"Authorization": f"Bearer {tok}"}, timeout=60,
+                                               json={"source_type": "log", "source_system": "retention-demo", "raw_snippet": f"export row for {PHONE}"})
+        check(send_retention().status_code == 200, "the retention-demo event was refused")
+        def retention_item():
+            items = self.get(self.admins, f"/v1/{ORG}/retention").json()["items"]
+            return next((i for i in items if i["system"] == "retention-demo"), None)
+        item = wait_for(lambda: (lambda i: i if i and i["status"] == "overdue" else None)(retention_item()), "the retention review to show the period as overdue")
+        check(item["clock_source"] == "policy data_since" and item["owner"]["team"] == "Data", f"the review lacks its clock or owner: {item}")
+        task = self.post(self.admins, f"/v1/{ORG}/retention/tasks", json={"systems": ["retention-demo"]}).json()
+        check(task["type"] == "retention" and task["tasks"][0]["owner"].startswith("Data"), "the retention task has no owner")
+        check(self.post(self.admins, f"/v1/{ORG}/retention/tasks", expect=(400,), json={"systems": ["retention-demo"]}).status_code == 400, "a duplicate task was accepted")
+        done = self.post(self.admins, f"/v1/{ORG}/requests/{task['request_id']}/tasks/retention-demo/confirm", json={"note": "purged"}).json()
+        check(done["status"] == "CLOSED" and not done["watching"], "the retention task did not close cleanly")
+        check(send_retention().status_code == 200, "the second retention-demo event was refused")
+        again = wait_for(lambda: (lambda i: i if i and i["status"] == "overdue" and i["task_request_id"] is None else None)(retention_item()),
+                         "the period to be overdue again after the data kept arriving")
+        check(self.get(self.admins, f"/api/{ORG}/verify-chain").json()["valid"], "the chain is not valid after the retention task")
 
         step("resolution and recurrence (F3): resolve, wait out the grace period, see it come back")
         target = noisy[0]

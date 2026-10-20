@@ -24,7 +24,7 @@ from db_encryption import decrypt_field
 from evidence_store import canonical as cn
 from subject_lookup.index import CATEGORIES, InvalidIdentifier, clean_identifier
 
-TYPES = ("access", "erasure", "correction")
+TYPES = ("access", "erasure", "correction", "retention")
 _REF = re.compile(r"^[ -~]{1,100}$")
 _DIGIT_RUN = re.compile(r"\d{9,}")
 
@@ -144,6 +144,41 @@ def create_request(store, org: str, req_type: str, requester_ref: str, identifie
                          (request_id, name, _owner_text(owners, name)))
         _event(store, org, request_id, "CREATED", actor, now, request_type=req_type, identifiers=len(identifiers))
         _event(store, org, request_id, "TASKS_CREATED", actor, now, systems=system_names)
+    return get_request(store, org, request_id)
+
+
+def create_retention_task(store, org: str, systems: List[str], owners: Optional[Dict[str, dict]] = None, actor: str = "system",
+                          detail: Optional[List[dict]] = None, today: Optional[datetime] = None) -> dict:
+    """
+    A retention review task: one task per system, asking its owner to confirm that data past its declared period was purged
+    (or to justify keeping it). It has no identifiers and no watch list; each step is a chain entry like any request.
+    `detail` is what the review found for these systems (field, period, due date); it is kept with the request for the record.
+    """
+    systems = sorted({s for s in systems if isinstance(s, str) and s})
+    if not systems:
+        raise RequestError("Name at least one system.")
+    with store._lock:
+        busy = {r["system"] for r in store._conn.execute(
+            "SELECT t.system FROM request_tasks t JOIN rights_requests r ON r.request_id = t.request_id "
+            "WHERE r.org = ? AND r.type = 'retention' AND r.status = 'OPEN' AND t.status = 'OPEN'", (org,))}
+    if busy & set(systems):
+        raise RequestError("There is already an open retention task for: " + ", ".join(sorted(busy & set(systems))) + ".")
+    owners = owners or {}
+    now = today or datetime.now(timezone.utc)
+    request_id = str(uuid.uuid4())
+    ref = f"RET-{now.strftime('%Y%m%d')}-{request_id[:6]}"
+    lookup = [{"category": "retention", "token_prefix": "-", "verdicts": [],
+               "systems": [{"system": s, "events": 0, "first_seen": now.isoformat(), "last_seen": now.isoformat()} for s in systems],
+               "retention": detail or []}]
+    with store.writer() as conn:
+        conn.execute("""INSERT INTO rights_requests (request_id, org, type, received_at, due_at, status, requester_ref,
+                        token_ref, created_by, created_at, lookup_json) VALUES (?, ?, 'retention', ?, NULL, 'OPEN', ?, NULL, ?, ?, ?)""",
+                     (request_id, org, now.isoformat(), ref, actor, now.isoformat(), json.dumps(lookup, sort_keys=True)))
+        for name in systems:
+            conn.execute("INSERT INTO request_tasks (request_id, system, owner) VALUES (?, ?, ?)",
+                         (request_id, name, _owner_text(owners, name)))
+        _event(store, org, request_id, "CREATED", actor, now, request_type="retention", identifiers=0)
+        _event(store, org, request_id, "TASKS_CREATED", actor, now, systems=systems)
     return get_request(store, org, request_id)
 
 
