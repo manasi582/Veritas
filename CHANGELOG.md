@@ -2,6 +2,12 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
+## Unreleased (1.2.0)
+
+Work towards full alignment with the problem statement (`docs/PS_ALIGNMENT_PLAN.md`).
+
+- **Phase A, groundwork:** fields named by a path, as API payloads name them (`user.phone`, `items[0].mobile`), now match the declared field and its validator. Events can say how they arrived (`source_kind`: log, api, schema or otlp) and the data map records it. The rule id `NOTICE_001` is reserved for the notice check (Phase E). `scope.md` now says what is observed in telemetry and what is not.
+
 ## Unreleased (1.1.0)
 
 - **Evidence format (foundation for the trust features):** records written from now on use a defined, versioned format (`hash_version` 1, documented in `docs/EVIDENCE_FORMAT.md`) so that an independent program can check them; status changes and comments are recorded as events in the chain (who, when, from, to), and the status column is only a cache that the chain check recomputes. Existing records are never rehashed; the first new record continues the old chain. A database is migrated when the server starts, after a private copy is made in the `backups` folder. An older program refuses to start on migrated data (it cannot read the new records).

@@ -133,7 +133,8 @@ def _require_org_config(org_id: str):
 # ---------------------------------------------------------------------------
 
 async def _process_event(event: Event, *, write_to_store: bool,
-                         agent_detections: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+                         agent_detections: Optional[Dict[str, int]] = None,
+                         source_kind: Optional[str] = None) -> Dict[str, Any]:
     """
     THE one shared path: detect -> evaluate -> (explain -> store -> live
     feed) per verdict. Both /events and /scan call this with their own
@@ -168,7 +169,7 @@ async def _process_event(event: Event, *, write_to_store: bool,
             get_store().flows.record(
                 event.tenant_id, event.source_system,
                 [(m.field, _label_for_entity_type(m.entity_type).lower()) for m in detected.matched_entities],
-                destination_of(event.fields, event.raw_snippet))
+                destination_of(event.fields, event.raw_snippet), source_kind=source_kind or event.source_type.value)
         except Exception:
             logger.debug("flow count failed", exc_info=True)
 
@@ -290,6 +291,9 @@ class IngestEventRequest(BaseModel):
     schema_version: Optional[int] = Field(default=None, alias="schema", ge=1, le=2)
     redaction_mode: Optional[str] = Field(default=None, pattern=r"^(monitor|mask|hash|drop|mixed)$")
     recognizer_pack_version: Optional[str] = Field(default=None, max_length=32, pattern=r"^[0-9A-Za-z._-]*$")
+    # How this event reached us, for routing and for the data map: a log line, an API payload, a database schema
+    # statement, an OpenTelemetry record. Optional: it defaults from source_type.
+    source_kind: Optional[str] = Field(default=None, pattern=r"^(log|api|schema|otlp)$")
     agent_detections: Dict[str, StrictInt] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
@@ -354,7 +358,8 @@ async def ingest_event(
         raw_snippet=req.raw_snippet,
         fields=req.fields,
     )
-    result = await _process_event(event, write_to_store=True, agent_detections=req.agent_detections or None)
+    result = await _process_event(event, write_to_store=True, agent_detections=req.agent_detections or None,
+                                  source_kind=req.source_kind)
     detected: DetectedEvent = result["detected"]
 
     return {

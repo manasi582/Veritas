@@ -67,6 +67,7 @@ from detection.models import (
     MatchedEntity,
 )
 from schemas.models import Event
+from field_names import field_leaf
 from validators import get_validator
 
 logger = logging.getLogger("detection.engine")
@@ -106,6 +107,8 @@ def _resolve_validation_status(org_id: str, field_name: str, matched_text: str,
     if validators is None:                       # called in-process: read the config here
         validators = identifier_validators(org_id)
     validator_name = validators.get(field_name)
+    if validator_name is None:                       # a payload path such as user.aadhaar: use the field's own name
+        validator_name = validators.get(field_leaf(field_name))
     if validator_name is None or validator_name == "none":
         return PATTERN_MATCH
 

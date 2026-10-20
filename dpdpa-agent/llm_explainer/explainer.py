@@ -133,6 +133,12 @@ def _build_fallback(verdict: Verdict, rule_id: str) -> ExplainedVerdict:
             f"tell whether the data was collected again, a copy was not erased, or the identifier now belongs to "
             f"someone else. See {section}."
         )
+    elif rule_id == "NOTICE_001":
+        explanation = (
+            f"Personal data of a kind that no current notice lists for {verdict.source_system} was observed there "
+            f"({verdict.field}). Veritas checks that a current notice covers the data it observes; it cannot tell "
+            f"whether the notice was shown to the person or whether it is legally adequate. See {section}."
+        )
     else:
         explanation = (
             f"Violation: {rule_id} — {verdict.field!r} exposed "

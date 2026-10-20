@@ -14,6 +14,9 @@ Public interface:
 
 from __future__ import annotations
 
+from field_names import field_leaf
+
+
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
@@ -115,6 +118,11 @@ def get_registry_entry(
     for f in config.fields:
         if f.field_name == field_name and f.source_system == source_system:
             return _org_field_to_registry_entry(org_id, f)
+    leaf = field_leaf(field_name)
+    if leaf != field_name:                     # a path such as user.phone: match the declared field by its own name
+        for f in config.fields:
+            if f.field_name == leaf and f.source_system == source_system:
+                return _org_field_to_registry_entry(org_id, f)
 
     if raise_on_missing:
         raise FieldNotRegisteredError(

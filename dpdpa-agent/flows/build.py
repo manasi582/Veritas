@@ -68,9 +68,10 @@ def build(store, tenant: str, config=None) -> dict:
         cover = _tokens(*[x for f in fields for x in (f.pii_category, f.field_name)])
         seen: Dict[str, dict] = {}
         for o in (r for r in observed if r["source_system"] == system):
-            c = seen.setdefault(o["category"], {"category": o["category"], "fields": set(), "count": 0,
+            c = seen.setdefault(o["category"], {"category": o["category"], "fields": set(), "kinds": set(), "count": 0,
                                                 "first_seen": o["first_seen"], "last_seen": o["last_seen"]})
             c["fields"].add(o["field"])
+            c["kinds"].add(o["source_kind"])
             c["count"] += o["count"]
             c["first_seen"] = min(c["first_seen"], o["first_seen"])
             c["last_seen"] = max(c["last_seen"], o["last_seen"])
@@ -87,7 +88,7 @@ def build(store, tenant: str, config=None) -> dict:
         for c in sorted(seen.values(), key=lambda x: -x["count"]):
             is_declared = c["category"].lower() in cover
             undeclared += 0 if is_declared else 1
-            observed_list.append({**c, "fields": sorted(c["fields"]), "declared": is_declared})
+            observed_list.append({**c, "fields": sorted(c["fields"]), "kinds": sorted(c["kinds"]), "declared": is_declared})
         inc = open_inc.get(system, {"total": 0, "top": []})
         if inc["total"]:
             status = "red"

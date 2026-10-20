@@ -207,3 +207,31 @@ def test_no_personal_value_can_be_in_the_map(store):
     store.flows.record(ORG, "s", [("raw_snippet", "phone")], "analytics.vendor.io")
     blob = repr(build.build(store, ORG, config())) + build.record_csv(build.build(store, ORG, config()))
     assert "9876543210" not in blob
+
+
+# ---- the way an event arrived (phase A of the problem-statement plan) -----------------------------------------
+
+def test_the_data_map_says_how_each_kind_of_data_was_seen(store):
+    store.flows.record(ORG, "order-service", [("phone", "phone")], source_kind="api")
+    store.flows.record(ORG, "order-service", [("raw_snippet", "phone")], source_kind="log")
+    store.flows.record(ORG, "order-service", [("raw_snippet", "phone")], source_kind="nonsense")     # unknown kinds count as logs
+    n = next(n for n in build.build(store, ORG, config())["nodes"] if n["id"] == "order-service")
+    phone = next(c for c in n["observed"] if c["category"] == "phone")
+    assert phone["kinds"] == ["api", "log"] and phone["count"] == 3
+
+
+def test_an_older_flow_table_is_rebuilt_with_the_kind(tmp_path):
+    import sqlite3
+    con = sqlite3.connect(tmp_path / "old.db")
+    con.row_factory = sqlite3.Row
+    con.execute("""CREATE TABLE observed_flows (tenant_id TEXT NOT NULL, source_system TEXT NOT NULL, field TEXT NOT NULL,
+                   category TEXT NOT NULL, destination TEXT NOT NULL DEFAULT '', count INTEGER NOT NULL DEFAULT 0,
+                   first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
+                   PRIMARY KEY (tenant_id, source_system, field, category, destination))""")
+    con.execute("INSERT INTO observed_flows VALUES ('o', 's', 'f', 'phone', '', 5, 't1', 't2')")
+    con.commit()
+    flow_mod.create_tables(con)
+    row = con.execute("SELECT source_kind, count FROM observed_flows").fetchone()
+    assert (row["source_kind"], row["count"]) == ("log", 5)
+    flow_mod.create_tables(con)                                           # idempotent
+    assert con.execute("SELECT COUNT(*) AS n FROM observed_flows").fetchone()["n"] == 1

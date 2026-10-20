@@ -18,5 +18,10 @@
     "section": "Sections 8(7) and 12(3) of the Digital Personal Data Protection Act, 2023",
     "text": "A Data Fiduciary shall erase personal data when the Data Principal withdraws consent or when the specified purpose is no longer being served, unless retention is necessary for compliance with a law, and a Data Principal may ask for erasure of personal data. An identifier for which an erasure request was closed has been observed again in a system.",
     "reference": "DPDPA 2023 § 8(7), § 12(3) — Erasure"
+  },
+  "NOTICE_001": {
+    "section": "Section 5 of the Digital Personal Data Protection Act, 2023",
+    "text": "A Data Fiduciary shall give the Data Principal a notice, at or before asking for consent, that describes the personal data to be processed and the purpose of processing. Personal data observed in a system for which no current notice describes that kind of data or that system may be processed without the notice the Act requires.",
+    "reference": "DPDPA 2023 § 5 — Notice"
   }
 }

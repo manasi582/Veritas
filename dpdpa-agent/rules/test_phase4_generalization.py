@@ -284,7 +284,8 @@ class TestRuleIdNamingConsistency:
     def test_all_categories_follow_stable_naming_convention(self):
         """Every RuleId member must be '<CATEGORY>_<3-digit-number>', and
         all categories (Exposure, Purpose, Retention, Linkage, and Erasure,
-        the watch for an identifier whose erasure request was closed) must be
+        the watch for an identifier whose erasure request was closed, and Notice,
+        the check that a current notice covers what is observed) must be
         present exactly once."""
         seen_categories = set()
         for rule_id in RuleId:
@@ -292,4 +293,4 @@ class TestRuleIdNamingConsistency:
             assert prefix, f"{rule_id.value!r} does not follow '<CATEGORY>_<N>'"
             assert suffix.isdigit() and len(suffix) == 3, f"{rule_id.value!r} suffix must be a 3-digit number"
             seen_categories.add(prefix)
-        assert seen_categories == {"EXPOSURE", "PURPOSE", "RETENTION", "LINKAGE", "ERASURE"}
+        assert seen_categories == {"EXPOSURE", "PURPOSE", "RETENTION", "LINKAGE", "ERASURE", "NOTICE"}

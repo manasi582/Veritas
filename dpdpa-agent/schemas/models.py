@@ -65,6 +65,7 @@ class RuleId(str, Enum):
     RETENTION_001 = "RETENTION_001"  # Data retained past consent expiry window
     LINKAGE_001   = "LINKAGE_001"    # Phase 3: quasi-identifier combination / linkage risk (rules/linkage.py)
     ERASURE_001   = "ERASURE_001"    # an identifier whose erasure request was closed was observed again (subject_lookup/)
+    NOTICE_001    = "NOTICE_001"     # personal data was observed in a system that no current notice covers (notice_registry/)
 
 
 class Severity(str, Enum):

@@ -32,11 +32,17 @@ This taxonomy is sanity-checked against the `amjadali-110/DPDPA-Checklist` refer
 
 ---
 
+## Also in scope since release 1.2: what can be seen in telemetry
+
+Besides application logs, Veritas observes **API payloads** (through a library in the service that masks before it sends), **database schema statements** found in database logs, and standard streaming receivers (syslog and OpenTelemetry). Retention is **tracked to closure by people** (a review, a task, a confirmation, recurrence if the data is still seen): it is never enforced by deleting anything.
+
+---
+
 ## Out of Scope — Organizational, Not Telemetry-Observable
 
 The following cannot be determined by watching logs and API payloads alone. They require access to organizational processes, legal documents, or human workflows:
 
-- **Consent-notice validity** — Whether the notice shown to users at data collection time was legally adequate. The agent can see *that* data was collected; it cannot evaluate *how* consent was obtained.
+- **Consent-notice validity** — Whether the notice shown to users at data collection time was legally adequate. The agent can see *that* data was collected; it cannot evaluate *how* consent was obtained. (What **is** in scope, from the notice registry: whether a *current* notice is on record that lists the kind of data observed in a system. That is coverage, not adequacy, and it does not show the notice was displayed to anyone. See `docs/PS_ALIGNMENT_PLAN.md`, Phase E.)
 - **Breach-notification workflow execution** — The agent flags `breach_notification_candidate = true` on qualifying verdicts; it does NOT send notifications to the Data Protection Board of India. That is a human workflow.
 - **DPO / DPIA governance** — Data Protection Officer appointment, Data Protection Impact Assessments, and Board-level governance are organizational obligations outside telemetry scope.
 - **Children's data flows** — Detecting whether a user is a minor requires identity verification data the agent does not have access to.
