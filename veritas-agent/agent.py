@@ -51,6 +51,16 @@ Config file (agent-config.yaml):
       - type: docker
         container: marketing-service
         source_system: marketing-analytics
+
+    redaction:                  # optional; see docs/AGENT_REDACTION.md
+      mode: mask                # monitor (default) | mask | hash | drop, for every kind of data below
+      categories:               # optional per kind: aadhaar, pan, phone, email, card
+        card: drop
+        email: monitor
+      fail_closed: true         # if redaction fails for a line, drop the line instead of sending it raw
+      max_line_chars: 65536     # longer lines are cut here (nothing past the cut is sent)
+      tee_file: /var/log/veritas-agent/masked.log   # optional masked copy for a log shipper
+      hash_key: ${VERITAS_HASH_KEY}                 # needed for mode: hash (16 or more characters)
 """
 
 from __future__ import annotations
@@ -72,6 +82,11 @@ from typing import Any, Dict, List, Optional, Union
 
 import requests
 import yaml
+
+try:   # the shared recognizer pack (next to this file); needed only when redaction is configured
+    import veritas_recognizers as vr
+except ImportError:    # pragma: no cover - a damaged install; load_config says so if redaction is asked for
+    vr = None
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -284,6 +299,217 @@ def validate_sources(sources: Any) -> List[str]:
     return problems
 
 
+REDACTION_MODES = ("monitor", "mask", "hash", "drop")
+REDACTION_KEYS = {"mode", "categories", "fail_closed", "max_line_chars", "tee_file", "tee_max_bytes", "hash_key"}
+DEFAULT_MAX_LINE_CHARS = 65536
+DEFAULT_TEE_MAX_BYTES = 50 * 1024 * 1024
+
+
+def validate_redaction(section: Any) -> List[str]:
+    """Problems with the redaction section (empty list = fine)."""
+    if section is None:
+        return []
+    if not isinstance(section, dict):
+        return ["'redaction' must be a mapping"]
+    problems: List[str] = []
+    if vr is None:
+        return ["redaction needs veritas_recognizers.py next to agent.py, and it is missing (reinstall the agent)"]
+    unknown = sorted(set(section) - REDACTION_KEYS)
+    if unknown:
+        problems.append(f"redaction: unknown setting(s) {unknown}; allowed: {', '.join(sorted(REDACTION_KEYS))}")
+    default = str(section.get("mode", "monitor")).lower()
+    if default not in REDACTION_MODES:
+        problems.append(f"redaction.mode must be one of {', '.join(REDACTION_MODES)}")
+    cats = section.get("categories") or {}
+    labels = sorted(l.lower() for l in vr.LABELS.values())
+    if not isinstance(cats, dict):
+        problems.append("redaction.categories must be a mapping of kind to mode")
+        cats = {}
+    for k, v in cats.items():
+        if str(k).lower() not in labels:
+            problems.append(f"redaction.categories: unknown kind {k!r}; use {', '.join(labels)}")
+        if str(v).lower() not in REDACTION_MODES:
+            problems.append(f"redaction.categories.{k} must be one of {', '.join(REDACTION_MODES)}")
+    modes = {default} | {str(v).lower() for v in cats.values()}
+    n = section.get("max_line_chars", DEFAULT_MAX_LINE_CHARS)
+    if not isinstance(n, int) or isinstance(n, bool) or not 1024 <= n <= 1_000_000:
+        problems.append("redaction.max_line_chars must be a whole number from 1024 to 1000000")
+    if not isinstance(section.get("fail_closed", True), bool):
+        problems.append("redaction.fail_closed must be true or false")
+    if "hash" in modes:
+        key = str(section.get("hash_key") or "")
+        if len(key) < 16:
+            problems.append("redaction: mode hash needs hash_key of 16 or more characters (for example hash_key: ${VERITAS_HASH_KEY})")
+    if section.get("tee_file") and not (modes - {"monitor"}):
+        problems.append("redaction.tee_file needs at least one kind set to mask, hash or drop (otherwise it would copy raw lines)")
+    return problems
+
+
+class MaskedTee:
+    """Appends the lines that are actually sent to a second file, for a log shipper that must never see raw data."""
+
+    def __init__(self, path: str, max_bytes: int = DEFAULT_TEE_MAX_BYTES) -> None:
+        self.path, self.max_bytes = Path(path), max_bytes
+        self._lock = threading.Lock()
+        self._fh = None
+
+    def _open(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(self.path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o640)
+        self._fh = os.fdopen(fd, "a", encoding="utf-8", errors="replace", newline="\n")
+
+    def write(self, line: str) -> None:
+        with self._lock:
+            if self._fh is None:
+                self._open()
+            if self.max_bytes and self._fh.tell() > self.max_bytes:
+                self._fh.close()
+                self._fh = None
+                os.replace(str(self.path), str(self.path) + ".1")
+                self._open()
+            self._fh.write(line.replace("\r", " ").replace("\n", " ") + "\n")
+            self._fh.flush()
+
+
+class Redactor:
+    """
+    Masks, hashes or drops structured personal data in a line before it leaves the host.
+
+    Per kind of data (aadhaar, pan, phone, email, card) the mode is: monitor (send as is), mask ([PHONE_REDACTED]),
+    hash (a keyed token, [PHONE#...], that lets the server find the same identifier again without holding it) or
+    drop (the line is not sent at all). It cannot find names; that stays on the server. It does not change the
+    application's own log files.
+    """
+
+    def __init__(self, section: Optional[Dict[str, Any]] = None, tee: Optional[MaskedTee] = None) -> None:
+        section = section or {}
+        self.default = str(section.get("mode", "monitor")).lower()
+        self.modes: Dict[str, str] = {}
+        if vr is not None:
+            for label in (l.lower() for l in vr.LABELS.values()):
+                self.modes[label] = str((section.get("categories") or {}).get(label, self.default)).lower()
+        self.fail_closed = bool(section.get("fail_closed", True))
+        # without a redaction section nothing is cut: lines go as they always did
+        self.max_chars = int(section.get("max_line_chars", DEFAULT_MAX_LINE_CHARS)) if section else 10 ** 12
+        self.key = str(section.get("hash_key") or "").encode("utf-8")
+        self.tee = tee
+        self.active = any(m != "monitor" for m in self.modes.values())
+        self._entities = [e for e, l in (vr.LABELS.items() if vr else []) if self.modes.get(l.lower(), "monitor") != "monitor"]
+
+    @property
+    def overall_mode(self) -> str:
+        modes = set(self.modes.values()) or {"monitor"}
+        return modes.pop() if len(modes) == 1 else "mixed"
+
+    def describe(self) -> Dict[str, Any]:
+        """Settings and rules version for the heartbeat (never any line text)."""
+        return {
+            "mode": self.overall_mode, "categories": dict(self.modes), "fail_closed": self.fail_closed,
+            "tee": self.tee is not None, "max_line_chars": self.max_chars,
+            "pack_version": vr.PACK_VERSION if vr else "", "pack_fingerprint": vr.pack_fingerprint() if vr else "",
+        }
+
+    def process(self, line: str):
+        """
+        Returns (line to send or None if it is dropped, {kind: how many values were masked or hashed}, truncated).
+
+        A line over the limit is cut, and nothing past the cut is sent. The cut is moved back before any value that
+        would be split by it, so a half of a phone number is never left behind.
+        """
+        truncated = len(line) > self.max_chars
+        if not self.active:
+            return (line[:self.max_chars] + " [TRUNCATED]" if truncated else line), {}, truncated
+        window = line[:self.max_chars + 64] if truncated else line      # a little beyond the cut, to see a value that crosses it
+        dets = vr.scan(window, self._entities)
+        cut = len(line)
+        if truncated:
+            cut = self.max_chars
+            for d in dets:
+                if d.start < cut < d.end:
+                    cut = d.start
+            dets = [d for d in dets if d.end <= cut]
+        text = line[:cut]
+        counts: Dict[str, int] = {}
+        out, pos = [], 0
+        for start, end, label in vr.covered_spans(dets):
+            mode = self.modes[label.lower()]
+            if mode == "drop":
+                return None, {label.lower(): 1}, truncated
+            out.append(text[pos:start])
+            out.append(vr.hash_token(label, text[start:end], self.key) if mode == "hash" else vr.placeholder(label))
+            counts[label.lower()] = counts.get(label.lower(), 0) + 1
+            pos = end
+        out.append(text[pos:])
+        result = "".join(out)
+        return (result + " [TRUNCATED]" if truncated else result), counts, truncated
+
+
+REDACTOR = Redactor()      # replaced in main() when the configuration asks for redaction
+
+
+def apply_redaction(line: str):
+    """
+    The one place a line is redacted, before it is queued or copied anywhere. Returns (line, counts) or
+    (None, counts) when the line must not be sent. With fail_closed (the default), an error drops the line.
+    """
+    r = REDACTOR
+    try:
+        started = time.perf_counter()
+        out, counts, truncated = r.process(line)
+        if truncated:
+            STATS.incr("truncated_lines")
+        if out is None:
+            STATS.incr("dropped_redaction")
+            REDACTION_DROPS.add(counts)
+            return None, counts
+        if counts:
+            STATS.incr("lines_redacted")
+            REDACTION_COUNTS.add(counts)
+        slow = time.perf_counter() - started
+        if slow > 0.25:
+            log_limited("redaction-slow", logging.WARNING,
+                        "Redacting one line took %.2f s; very long or unusual lines slow the agent.", slow)
+    except Exception as e:
+        STATS.incr("redaction_errors")
+        log_limited("redaction-error", logging.ERROR,
+                    "Redaction failed on a line (%s: %s). %s", type(e).__name__, e,
+                    "The line is dropped (fail_closed)." if r.fail_closed else "The line is sent as it was (fail_closed is off).")
+        if r.fail_closed:
+            STATS.incr("dropped_redaction_error")
+            return None, {}
+        return line, {}
+    if r.tee is not None:
+        try:
+            r.tee.write(out)
+        except Exception as e:
+            STATS.incr("tee_errors")
+            log_limited("tee", logging.WARNING, "Could not write the masked copy: %s", e)
+    return out, counts
+
+
+class RedactionCounts:
+    """How many values of each kind this agent has masked or hashed (counts only), for the heartbeat."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._counts: Dict[str, int] = {}
+
+    def add(self, counts: Dict[str, int]) -> None:
+        with self._lock:
+            for k, v in counts.items():
+                self._counts[k] = self._counts.get(k, 0) + v
+
+    def snapshot(self) -> Dict[str, int]:
+        with self._lock:
+            return dict(self._counts)
+
+
+REDACTION_COUNTS = RedactionCounts()
+REDACTION_DROPS = RedactionCounts()      # lines not sent because they held this kind of data (mode drop)
+
+
+
+
 def validate_address(address: Any) -> Optional[str]:
     """Explain what is wrong with veritas_address, or None. Retrying cannot fix any of these."""
     from urllib.parse import urlparse
@@ -328,7 +554,7 @@ def load_config(path: Path) -> Dict[str, Any]:
         logger.error("Config problem: registration_key is still a placeholder (%r). Paste the key "
                      "issued in the Veritas dashboard (Agents > Issue Registration Key).", key)
         sys.exit(EXIT_CONFIG)
-    problems = validate_sources(cfg.get("sources"))
+    problems = validate_sources(cfg.get("sources")) + validate_redaction(cfg.get("redaction"))
     if problems:
         for problem in problems:
             logger.error("Config problem: %s", problem)
@@ -558,6 +784,8 @@ class AgentStats:
     NAMES = (
         "lines_read", "forwarded", "retries",
         "dropped_buffer_full", "dropped_rejected", "dropped_auth", "dropped_other",
+        "lines_redacted", "dropped_redaction", "dropped_redaction_error", "redaction_errors",
+        "truncated_lines", "tee_errors",
     )
 
     def __init__(self) -> None:
@@ -672,6 +900,7 @@ def forward_event(
     raw_snippet: str,
     source_system: str,
     verify: Union[bool, str] = True,
+    meta: Optional[Dict[str, Any]] = None,
 ) -> None:
     url     = base_url.rstrip("/") + state["event_endpoint"]
     headers = _build_headers(state)
@@ -681,6 +910,8 @@ def forward_event(
         "raw_snippet":   raw_snippet,
         "fields":        {},
     }
+    if meta:    # event schema 2: what this agent did to the line (counts only), see docs/AGENT_REDACTION.md
+        payload.update(meta)
     resp = requests.post(url, json=payload, headers=headers, timeout=FORWARD_TIMEOUT, verify=verify)
     resp.raise_for_status()
 
@@ -717,16 +948,18 @@ def deliver(
     max_backoff: float = MAX_BACKOFF,
 ) -> str:
     """
-    Deliver one (raw_snippet, source_system) item. Returns "delivered" or "dropped".
-    `forward` is called as forward(raw_snippet, source_system).
+    Deliver one (raw_snippet, source_system) item, optionally with a third element (event schema 2 fields).
+    Returns "delivered" or "dropped". `forward` is called as forward(raw_snippet, source_system), with the third
+    element as an extra argument only when there is one.
     """
-    raw_snippet, source_system = item
+    raw_snippet, source_system = item[0], item[1]
+    extra = (item[2],) if len(item) > 2 and item[2] else ()
     backoff = 1.0
     server_error_attempts = 0
 
     while True:
         try:
-            forward(raw_snippet, source_system)
+            forward(raw_snippet, source_system, *extra)
             stats.incr("forwarded")
             return "delivered"
 
@@ -808,8 +1041,8 @@ def forwarding_worker(
     base_url = config["veritas_address"]
     verify   = _verify_from_state(config, state)
 
-    def forward(raw_snippet: str, source_system: str) -> None:
-        forward_event(base_url, state, raw_snippet, source_system, verify=verify)
+    def forward(raw_snippet: str, source_system: str, meta: Optional[Dict[str, Any]] = None) -> None:
+        forward_event(base_url, state, raw_snippet, source_system, verify=verify, meta=meta)
 
     logger.info("Forwarding worker started. Watching queue…")
 
@@ -1308,10 +1541,22 @@ def tail_docker(
         logger.error("Docker log stream error for '%s': %s", container_name, e)
 
 
+def redaction_meta(counts: Dict[str, int]) -> Dict[str, Any]:
+    """Event schema 2: how this agent handled the line. Counts of kinds only, never any value."""
+    return {"schema": 2, "redaction_mode": REDACTOR.overall_mode,
+            "recognizer_pack_version": vr.PACK_VERSION if vr else "", "agent_detections": dict(counts)}
+
+
 def _enqueue(event_queue: queue.Queue, line: str, source_system: str) -> None:
     STATS.incr("lines_read")
+    item: tuple = (line, source_system)
+    if REDACTOR.active or len(line) > REDACTOR.max_chars:
+        line, counts = apply_redaction(line)       # before the line is queued or copied anywhere
+        if line is None:
+            return                                 # dropped: not sent, counted
+        item = (line, source_system, redaction_meta(counts) if REDACTOR.active else None)
     try:
-        event_queue.put_nowait((line, source_system))
+        event_queue.put_nowait(item)
     except queue.Full:
         # Buffer full (server slow or down for a long time): drop the OLDEST line
         # so memory stays bounded and the newest telemetry is kept.
@@ -1321,7 +1566,7 @@ def _enqueue(event_queue: queue.Queue, line: str, source_system: str) -> None:
         except queue.Empty:
             pass
         try:
-            event_queue.put_nowait((line, source_system))
+            event_queue.put_nowait(item)
         except queue.Full:
             STATS.incr("dropped_buffer_full")
         log_limited("buffer-full", logging.WARNING,
@@ -1342,6 +1587,7 @@ def build_health(event_queue: Optional[queue.Queue]) -> Dict[str, Any]:
         "queue_capacity": BUFFER_MAX,
         "counters": STATS.snapshot(),
         "sources": SOURCES.snapshot(),
+        "redaction": {**REDACTOR.describe(), "redacted": REDACTION_COUNTS.snapshot(), "dropped": REDACTION_DROPS.snapshot()},
     }
 
 
@@ -1402,6 +1648,15 @@ def main() -> None:
     configure_state_dir(config)
     state  = load_state()
     state  = bootstrap(config, state)
+
+    global REDACTOR
+    red = config.get("redaction")
+    if red:
+        tee = MaskedTee(red["tee_file"], int(red.get("tee_max_bytes", DEFAULT_TEE_MAX_BYTES))) if red.get("tee_file") else None
+        REDACTOR = Redactor(red, tee)
+        logger.info("Redaction: %s%s%s (recognizer pack %s)", REDACTOR.overall_mode,
+                    ", fail-closed" if REDACTOR.fail_closed and REDACTOR.active else "",
+                    f", masked copy in {red['tee_file']}" if tee else "", vr.PACK_VERSION)
 
     sources = config.get("sources", [])
     if not sources:

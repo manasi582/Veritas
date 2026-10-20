@@ -16,10 +16,11 @@ The canonical copy is dpdpa-agent/veritas_recognizers.py; veritas-agent/veritas_
 from __future__ import annotations
 
 import hashlib
+import hmac
 import re
 from typing import Dict, Iterable, List, NamedTuple, Optional, Tuple
 
-PACK_VERSION = "1.0.0"
+PACK_VERSION = "1.1.0"
 
 # --------------------------------------------------------------------------- entity types, labels, rules
 
@@ -171,6 +172,35 @@ def scan(text: str, entities: Optional[Iterable[str]] = None) -> List[Detection]
         if not any(d.entity_type == k.entity_type and d.start >= k.start and d.end <= k.end for k in kept):
             kept.append(d)
     return sorted(kept, key=lambda d: (d.start, d.end, d.entity_type))
+
+
+# --------------------------------------------------------------------------- identifiers: normalising and keyed tokens
+#
+# The same person's number is written many ways (+91 98765 43210, 9876543210, 91-9876543210). To find where an
+# identifier appeared without keeping it, every writing is first reduced to one canonical form, then turned into a
+# keyed token: HMAC-SHA256 under a key only the organization holds. The agent (hash mode) and the server's lookup use
+# these two functions, so a token made in one place can be found from the other. A token cannot be turned back into
+# the value, but anyone with the key can test a guess against it: protect the key like a password.
+
+def normalise_identifier(label: str, value: str) -> str:
+    label, value = label.upper(), (value or "").strip()
+    if label in ("AADHAAR", "CARD"):
+        return re.sub(r"\D", "", value)
+    if label == "PAN":
+        return value.upper()
+    if label == "EMAIL":
+        return value.lower()
+    if label == "PHONE":
+        digits = re.sub(r"\D", "", value)
+        return digits[-10:] if len(digits) > 10 else digits
+    return value
+
+
+def hash_token(label: str, value: str, key: bytes) -> str:
+    """[PHONE#0123456789abcdef]: 16 hex characters of HMAC-SHA256(key, LABEL LF normalised value)."""
+    label = label.upper()
+    material = (label + "\n" + normalise_identifier(label, value)).encode("utf-8")
+    return "[%s#%s]" % (label, hmac.new(key, material, hashlib.sha256).hexdigest()[:16])
 
 
 def placeholder(label: str) -> str:

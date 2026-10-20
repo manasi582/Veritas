@@ -29,6 +29,7 @@ from rate_limit import issue_key_rate_limit, record_register_failure, register_r
 from user_store.models import User, UserRole
 from user_store.store import get_user_store
 from labels import check_label
+import veritas_recognizers
 from veritas_version import MIN_AGENT_VERSION, get_version, is_agent_outdated
 
 logger = logging.getLogger("api.agents")
@@ -69,6 +70,12 @@ def _agent_visible_to(user: User, agent: Agent) -> bool:
     return _can_access_org(user, agent.org_id)
 
 
+def _redaction_pack_mismatch(health: Optional[dict]) -> bool:
+    """True when the agent reports recognizer rules that differ from this server's (it may mask differently)."""
+    reported = ((health or {}).get("redaction") or {}).get("pack_fingerprint")
+    return bool(reported) and reported != veritas_recognizers.pack_fingerprint()
+
+
 def _agent_to_dict(agent: Agent) -> dict:
     return {
         "agent_id": agent.agent_id,
@@ -81,6 +88,7 @@ def _agent_to_dict(agent: Agent) -> dict:
         "agent_version": agent.agent_version,
         "outdated": is_agent_outdated(agent.agent_version),
         "health": agent.health,
+        "redaction_pack_mismatch": _redaction_pack_mismatch(agent.health),
         "health_updated_at": agent.health_updated_at.isoformat() if agent.health_updated_at else None,
     }
 
@@ -143,6 +151,29 @@ class SourceHealth(BaseModel):
     last_line_at: Optional[str] = Field(None, max_length=40)
 
 
+_REDACTION_MODES = Literal["monitor", "mask", "hash", "drop", "mixed"]
+
+
+class RedactionHealth(BaseModel):
+    """What the agent does to a line before sending it, and which recognizer rules it uses. No line text."""
+    mode: _REDACTION_MODES = "monitor"
+    categories: Dict[str, Literal["monitor", "mask", "hash", "drop"]] = Field(default_factory=dict)
+    fail_closed: bool = True
+    tee: bool = False
+    max_line_chars: int = Field(0, ge=0)
+    pack_version: str = Field("", max_length=32)
+    pack_fingerprint: str = Field("", max_length=32)
+    redacted: Dict[str, int] = Field(default_factory=dict)      # values masked or hashed, by kind
+    dropped: Dict[str, int] = Field(default_factory=dict)       # lines not sent because of this kind
+
+    @field_validator("categories", "redacted", "dropped")
+    @classmethod
+    def _bound_kinds(cls, v):
+        if len(v) > 10 or any(len(k) > 20 for k in v):
+            raise ValueError("too many kinds or kind name too long")
+        return v
+
+
 class AgentHealth(BaseModel):
     """
     Health report an agent attaches to its heartbeat. Everything is bounded: the
@@ -155,6 +186,7 @@ class AgentHealth(BaseModel):
     queue_capacity: int = Field(0, ge=0)
     counters: Dict[str, int] = Field(default_factory=dict)
     sources: List[SourceHealth] = Field(default_factory=list)
+    redaction: Optional[RedactionHealth] = None    # absent for agents older than the redaction release
 
     @field_validator("counters")
     @classmethod
@@ -422,4 +454,6 @@ async def agent_heartbeat(
         "server_version": get_version(),
         "min_agent_version": MIN_AGENT_VERSION,
         "agent_outdated": is_agent_outdated(reported),
+        "recognizer_pack_version": veritas_recognizers.PACK_VERSION,
+        "recognizer_pack_fingerprint": veritas_recognizers.pack_fingerprint(),
     }

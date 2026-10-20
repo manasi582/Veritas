@@ -59,7 +59,7 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
 
 from agent_store.models import Agent
 from api.agent_auth import verify_agent_token
@@ -75,6 +75,7 @@ from evidence_store.store import get_store
 from investigation import investigate, parse_reference
 import alerts
 from incidents.template import template_of
+from detection.agent_reported import LABEL_TO_ENTITY, matches_from_agent
 from flows.destination import destination_of
 from labels import check_label
 from llm_explainer.explainer import ExplainedVerdict, build_deferred_explanation
@@ -131,7 +132,8 @@ def _require_org_config(org_id: str):
 # Shared engine call — used by BOTH /events and /scan
 # ---------------------------------------------------------------------------
 
-async def _process_event(event: Event, *, write_to_store: bool) -> Dict[str, Any]:
+async def _process_event(event: Event, *, write_to_store: bool,
+                         agent_detections: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
     """
     THE one shared path: detect -> evaluate -> (explain -> store -> live
     feed) per verdict. Both /events and /scan call this with their own
@@ -155,6 +157,11 @@ async def _process_event(event: Event, *, write_to_store: bool) -> Dict[str, Any
             status_code=503, headers={"Retry-After": str(RETRY_AFTER_SECONDS)},
             detail="Veritas is busy detecting earlier events. Retry shortly; nothing was lost.",
         )
+    if agent_detections:   # the agent masked or hashed these before sending: the text holds placeholders (schema 2)
+        reported = matches_from_agent(event.raw_snippet, agent_detections)
+        if reported:
+            detected = DetectedEvent(event=detected.event, contains_pii=True,
+                                     matched_entities=list(detected.matched_entities) + reported)
     verdicts: List[Verdict] = evaluate_event(detected)
     if write_to_store and detected.matched_entities:
         try:   # counts of what was observed where (never values), for the observed processing map
@@ -259,6 +266,25 @@ class IngestEventRequest(BaseModel):
     timestamp: Optional[datetime] = None
     raw_snippet: str = Field(..., min_length=1, max_length=100_000)
     fields: Dict[str, str] = Field(default_factory=dict)
+    # Event schema 2 (an agent that masks, hashes or drops before sending). Optional: schema 1 events are unchanged.
+    schema_version: Optional[int] = Field(default=None, alias="schema", ge=1, le=2)
+    redaction_mode: Optional[str] = Field(default=None, pattern=r"^(monitor|mask|hash|drop|mixed)$")
+    recognizer_pack_version: Optional[str] = Field(default=None, max_length=32, pattern=r"^[0-9A-Za-z._-]*$")
+    agent_detections: Dict[str, StrictInt] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("agent_detections")
+    @classmethod
+    def _detections_are_counts_of_known_kinds(cls, v):
+        if len(v) > len(LABEL_TO_ENTITY):
+            raise ValueError("agent_detections names too many kinds")
+        for kind, n in v.items():
+            if kind not in LABEL_TO_ENTITY:
+                raise ValueError(f"agent_detections: unknown kind {kind!r}")
+            if not isinstance(n, int) or isinstance(n, bool) or not 0 <= n <= 100_000:
+                raise ValueError("agent_detections: counts must be whole numbers from 0 to 100000")
+        return v
 
     @field_validator("source_system")
     @classmethod
@@ -308,7 +334,7 @@ async def ingest_event(
         raw_snippet=req.raw_snippet,
         fields=req.fields,
     )
-    result = await _process_event(event, write_to_store=True)
+    result = await _process_event(event, write_to_store=True, agent_detections=req.agent_detections or None)
     detected: DetectedEvent = result["detected"]
 
     return {

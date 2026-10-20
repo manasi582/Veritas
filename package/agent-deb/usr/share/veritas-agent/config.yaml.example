@@ -33,3 +33,13 @@ sources:
   # - type: docker
   #   container: my-container
   #   source_system: my-container-logs
+
+# Mask, hash or drop personal data in a line before it leaves this machine (off unless you uncomment it).
+# See docs/AGENT_REDACTION.md. It cannot find names, and it does not change the application's own log files.
+# redaction:
+#   mode: mask                  # monitor (default) | mask | hash | drop
+#   categories:                 # optional per kind: aadhaar, pan, phone, email, card
+#     card: drop
+#   fail_closed: true           # if a line cannot be redacted, drop it instead of sending it raw
+#   tee_file: /var/log/veritas-agent/masked.log   # optional masked copy for a log shipper
+#   hash_key: ${VERITAS_HASH_KEY}                 # needed for mode: hash

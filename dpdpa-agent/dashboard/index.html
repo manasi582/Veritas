@@ -2136,6 +2136,7 @@
                   <th>Status</th>
                   <th>Version</th>
                   <th>Health</th>
+                  <th>Redaction</th>
                   <th>Events</th>
                   <th>Last Heartbeat</th>
                   <th>Registered</th>
@@ -2144,7 +2145,7 @@
               </thead>
               <tbody id="agentsTbody">
                 <tr id="agentsEmptyRow">
-                  <td colspan="9" style="text-align:center;color:var(--text-muted);padding:2rem;">
+                  <td colspan="10" style="text-align:center;color:var(--text-muted);padding:2rem;">
                     No agents registered for this organisation.
                   </td>
                 </tr>
@@ -3864,6 +3865,30 @@ function agentHealthSummary(a) {
   };
 }
 
+function agentRedactionCell(a) {
+  // Returns { html, attention } for the Redaction column. The agent reports this; its strings are escaped.
+  const r = a.health && a.health.redaction;
+  if (!r) return { html: '<span style="color:var(--text-subtle)" title="This agent does not report redaction (older than the redaction release)">—</span>', attention: false };
+  const modes = ['monitor', 'mask', 'hash', 'drop', 'mixed'];
+  const mode = modes.includes(r.mode) ? r.mode : 'monitor';
+  const cats = r.categories || {};
+  const detail = Object.keys(cats).filter(k => cats[k] !== 'monitor').map(k => `${k}: ${cats[k]}`).join(', ');
+  const redacted = Object.entries(r.redacted || {}).map(([k, v]) => `${k} ${Number(v) || 0}`).join(', ');
+  const dropped = Object.entries(r.dropped || {}).map(([k, v]) => `${k} ${Number(v) || 0}`).join(', ');
+  const tip = [
+    mode === 'monitor' ? 'Sends lines as they are; the server finds personal data.' : `Handled before sending: ${detail || mode}`,
+    r.fail_closed ? 'Fail-closed: a line that cannot be redacted is dropped.' : 'Fail-open: a line that cannot be redacted is sent as it was.',
+    r.tee ? 'Writes a masked copy for a log shipper.' : '',
+    redacted ? `Values masked or hashed: ${redacted}` : '', dropped ? `Lines not sent: ${dropped}` : '',
+    `Recognizer rules ${r.pack_version || '?'} (${r.pack_fingerprint || '?'})`,
+    a.redaction_pack_mismatch ? "These rules differ from this server's: the agent may mask differently from what the server would." : '',
+  ].filter(Boolean).join('\n');
+  const cls = mode === 'monitor' ? 'MEDIUM' : 'LOW';
+  const warn = a.redaction_pack_mismatch ? ' <span class="badge MEDIUM" title="Different recognizer rules than this server">rules differ</span>' : '';
+  const open = !r.fail_closed && mode !== 'monitor' ? ' <span class="badge MEDIUM" title="fail-open">fail-open</span>' : '';
+  return { html: `<span class="badge ${cls}" title="${escapeAttr(tip)}">${escapeHtml(mode)}</span>${open}${warn}`, attention: !!a.redaction_pack_mismatch };
+}
+
 function agentHeartbeatCell(a) {
   if (!a.last_heartbeat_at) return { html: '<span style="color:var(--text-subtle)">never</span>', stale: false };
   const when = new Date(a.last_heartbeat_at);
@@ -3892,7 +3917,7 @@ function renderAgentsTable(agents) {
 
   if (agents.length === 0) {
     attention.textContent = 0;
-    tbody.innerHTML = `<tr id="agentsEmptyRow"><td colspan="9" style="text-align:center;color:var(--text-muted);padding:2rem;">No agents registered for this organisation.</td></tr>`;
+    tbody.innerHTML = `<tr id="agentsEmptyRow"><td colspan="10" style="text-align:center;color:var(--text-muted);padding:2rem;">No agents registered for this organisation.</td></tr>`;
     return;
   }
 
@@ -3900,7 +3925,8 @@ function renderAgentsTable(agents) {
   tbody.innerHTML = agents.map(a => {
     const hb      = agentHeartbeatCell(a);
     const health  = agentHealthSummary(a);
-    if (a.status === 'ACTIVE' && (hb.stale || health.attention || a.outdated)) needAttention += 1;
+    const redaction = agentRedactionCell(a);
+    if (a.status === 'ACTIVE' && (hb.stale || health.attention || a.outdated || redaction.attention)) needAttention += 1;
     const created = new Date(a.created_at).toLocaleDateString();
     const canRevoke = a.status === 'ACTIVE';
     const outdatedTip = a.agent_version
@@ -3916,6 +3942,7 @@ function renderAgentsTable(agents) {
       <td><span class="status-badge ${escapeHtml(a.status)}">${escapeHtml(a.status)}</span></td>
       <td>${version}</td>
       <td>${health.html}</td>
+      <td>${redaction.html}</td>
       <td>${a.events_received}</td>
       <td>${hb.html}</td>
       <td>${created}</td>

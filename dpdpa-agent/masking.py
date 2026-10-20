@@ -64,6 +64,7 @@ _ENTITY_TYPE_LABELS: Dict[str, str] = {
     "PHONE_NUMBER": "PHONE",
     "EMAIL_ADDRESS": "EMAIL",
     "PERSON": "NAME",
+    "CREDIT_CARD": "CARD",
 }
 
 
