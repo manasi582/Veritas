@@ -1748,6 +1748,7 @@
         <div class="integrity-panel">
           <button class="btn btn-verify" onclick="runVerifyChain()"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Verify Cryptographic Hash Chain</button>
           <div class="integrity-result" id="integrityResult"></div>
+          <button class="btn" id="btn-audit-pack" onclick="downloadAuditPack()" title="A zip with the evidence, signed checkpoints, public key, summary and verify scripts, for an auditor to check without Veritas">Download audit pack</button>
           <span style="margin-left:auto;font-size:11.5px;color:var(--text-muted);font-family:var(--font-mono);" id="integrityTime"></span>
         </div>
 
@@ -2902,8 +2903,9 @@ function renderIncidents(rows) {
     const owner = i.owner ? [i.owner.team, i.owner.slack_channel, i.owner.email].filter(Boolean).map(escapeHtml).join(' · ') : '<span style="color:var(--text-muted)">no owner set</span>';
     const fmt = t => t ? new Date(t).toLocaleString() : '';
     const id = safeId(i.incident_id);
-    const actions = i.status === 'RESOLVED' ? '' :
-      `<span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN">${i.status === 'OPEN' ? `<button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="setIncidentStatus('${id}','ACKNOWLEDGED')">Acknowledge</button> ` : ''}<button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="setIncidentStatus('${id}','RESOLVED')">Resolve</button></span>`;
+    const report = i.breach_candidate ? `<span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN,AUDITOR"><a class="btn btn-secondary" style="padding:4px 9px;font-size:11px;text-decoration:none;" title="A draft breach report for the DPO and counsel, built from the signed chain" href="/v1/${encodeURIComponent(currentOrgId)}/incidents/${id}/breach-pack">Breach report</a></span> ` : '';
+    const actions = report + (i.status === 'RESOLVED' ? '' :
+      `<span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN">${i.status === 'OPEN' ? `<button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="setIncidentStatus('${id}','ACKNOWLEDGED')">Acknowledge</button> ` : ''}<button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="setIncidentStatus('${id}','RESOLVED')">Resolve</button></span>`);
     return `<tr>
       <td class="mono" style="color:var(--text-headings)">INC-${escapeHtml(i.number)}</td>
       <td><span class="badge ${safeId(i.severity)}">${escapeHtml(i.severity)}</span>${i.breach_candidate ? ' <span title="breach notification candidate" style="color:var(--breach)">&#9888;</span>' : ''}</td>
@@ -3462,6 +3464,12 @@ async function runVerifyChain() {
     el.innerHTML = `${xIcon} Verification failed — server error`;
     el.className = 'integrity-result invalid';
   }
+}
+
+// ---- Audit pack (a zip an auditor can verify without Veritas) ----
+function downloadAuditPack() {
+  if (!currentOrgId) return;
+  window.location.href = `/v1/${encodeURIComponent(currentOrgId)}/audit-pack`;
 }
 
 // ---- Detail Drawer ----

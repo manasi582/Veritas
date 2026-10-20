@@ -1,0 +1,169 @@
+{
+  "format": 1,
+  "status": "DRAFT",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "review_note": "A starting point written by the Veritas team. No lawyer has reviewed it. Counsel must confirm every retention period, purpose and consent scope for your organization before it is applied to production.",
+  "id": "healthtech",
+  "title": "Clinics and health apps (healthtech)",
+  "industry": "Healthcare",
+  "version": "0.1.0",
+  "summary": "A clinic, hospital software or health app: patient records, lab results, appointments, billing and support.",
+  "systems": {
+    "patient-db": "Patient records",
+    "lab-system": "Lab orders and results",
+    "appointments-api": "Booking and reminders",
+    "billing": "Invoices and insurance claims",
+    "support-desk": "Support tickets and chat"
+  },
+  "fields": [
+    {
+      "field_name": "name",
+      "pii_category": "name",
+      "source_system": "patient-db",
+      "declared_purpose": "care_delivery",
+      "consent_scope": "treatment",
+      "retention_days": 1095,
+      "basis": "Medical record retention periods vary by record type, state and facility; three years for outpatient records is a commonly cited minimum. Confirm with counsel and clinical governance."
+    },
+    {
+      "field_name": "dob",
+      "pii_category": "dob",
+      "source_system": "patient-db",
+      "declared_purpose": "care_delivery",
+      "consent_scope": "treatment",
+      "retention_days": 1095,
+      "basis": "As above."
+    },
+    {
+      "field_name": "phone",
+      "pii_category": "phone",
+      "source_system": "patient-db",
+      "declared_purpose": "care_delivery",
+      "consent_scope": "treatment",
+      "retention_days": 1095,
+      "basis": "As above."
+    },
+    {
+      "field_name": "address",
+      "pii_category": "address",
+      "source_system": "patient-db",
+      "declared_purpose": "care_delivery",
+      "consent_scope": "treatment",
+      "retention_days": 1095,
+      "basis": "As above."
+    },
+    {
+      "field_name": "abha_id",
+      "pii_category": "health_id",
+      "source_system": "patient-db",
+      "declared_purpose": "care_delivery",
+      "consent_scope": "treatment",
+      "retention_days": 1095,
+      "basis": "Health IDs link a person across providers: keep to what care needs. Confirm."
+    },
+    {
+      "field_name": "diagnosis",
+      "pii_category": "health_record",
+      "source_system": "patient-db",
+      "declared_purpose": "care_delivery",
+      "consent_scope": "treatment",
+      "retention_days": 1095,
+      "basis": "Health data is sensitive in practice even though the Act does not name a separate category. Confirm retention against clinical rules."
+    },
+    {
+      "field_name": "lab_result",
+      "pii_category": "health_record",
+      "source_system": "lab-system",
+      "declared_purpose": "care_delivery",
+      "consent_scope": "treatment",
+      "retention_days": 1095,
+      "basis": "As above."
+    },
+    {
+      "field_name": "phone",
+      "pii_category": "phone",
+      "source_system": "appointments-api",
+      "declared_purpose": "appointment_reminders",
+      "consent_scope": "service_delivery",
+      "retention_days": 180,
+      "basis": "Reminder contact details are needed only while the booking is live. Placeholder; confirm."
+    },
+    {
+      "field_name": "email",
+      "pii_category": "email",
+      "source_system": "appointments-api",
+      "declared_purpose": "appointment_reminders",
+      "consent_scope": "service_delivery",
+      "retention_days": 180,
+      "basis": "As above."
+    },
+    {
+      "field_name": "name",
+      "pii_category": "name",
+      "source_system": "billing",
+      "declared_purpose": "billing_and_claims",
+      "consent_scope": "financial_record",
+      "retention_days": 2190,
+      "basis": "Invoices and tax records are commonly kept about six years. Confirm."
+    },
+    {
+      "field_name": "phone",
+      "pii_category": "phone",
+      "source_system": "support-desk",
+      "declared_purpose": "customer_support",
+      "consent_scope": "service_delivery",
+      "retention_days": 365,
+      "basis": "Placeholder; confirm."
+    }
+  ],
+  "linkage_rules": [
+    {
+      "fields": [
+        "name",
+        "dob",
+        "diagnosis"
+      ],
+      "risk": "LINKAGE_RISK"
+    },
+    {
+      "fields": [
+        "abha_id",
+        "phone"
+      ],
+      "risk": "LINKAGE_RISK"
+    }
+  ],
+  "notice_suggestions": [
+    {
+      "title": "Patient privacy notice",
+      "data_categories": [
+        "name",
+        "dob",
+        "phone",
+        "address",
+        "health_id",
+        "health_record"
+      ],
+      "systems": [
+        "patient-db",
+        "lab-system"
+      ]
+    },
+    {
+      "title": "Appointments and reminders notice",
+      "data_categories": [
+        "phone",
+        "email"
+      ],
+      "systems": [
+        "appointments-api"
+      ]
+    }
+  ],
+  "watch_for": [
+    "Diagnoses or lab results in logs, error messages or support tickets.",
+    "Children's data: the Act asks for a parent's or guardian's verifiable consent. Veritas does not check age or consent; your process must.",
+    "Reminder messages that carry more than they need to."
+  ]
+}

@@ -537,6 +537,61 @@ class E2E:
             check(code == 0, f"the verifier rejected clean evidence of {org}: {out}")
         print("    the verifier accepts the clean export of both organizations")
 
+        step("audit pack, breach pack, pipeline gate, policy packs: what an auditor, a DPO and a developer each get")
+        import io
+        import zipfile
+        pack = zipfile.ZipFile(io.BytesIO(self.get(self.admins, f"/v1/{ORG}/audit-pack").content))
+        check({"evidence.jsonl", "checkpoints.jsonl", "veritas.pub", "SUMMARY.md", "VERIFY.md", "verify.sh", "MANIFEST.sha256"} <= set(pack.namelist()),
+              f"the audit pack is missing files: {pack.namelist()}")
+        pdir = self.work / "audit-pack"
+        pack.extractall(pdir)
+        shutil.copyfile(self.verifier(), pdir / ("veritas-verify.exe" if os.name == "nt" else "veritas-verify"))
+        os.chmod(pdir / ("veritas-verify.exe" if os.name == "nt" else "veritas-verify"), 0o755)
+        cmd = [str(pdir / ("veritas-verify.exe" if os.name == "nt" else "veritas-verify")), "--evidence", str(pdir / "evidence.jsonl"),
+               "--checkpoints", str(pdir / "checkpoints.jsonl"), "--pubkey", str(pdir / "veritas.pub")]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        check(r.returncode == 0, f"the verifier rejected the audit pack: {r.stdout} {r.stderr}")
+        if os.name != "nt":
+            r = subprocess.run(["sh", str(pdir / "verify.sh")], capture_output=True, text=True)
+            check(r.returncode == 0 and "PASS" in r.stdout, f"the pack's own verify.sh failed: {r.stdout} {r.stderr}")
+        text = (pdir / "SUMMARY.md").read_text()
+        check("does not prove" in text and not any(raw in text for raw in RAW), "the audit pack summary is wrong or holds a raw value")
+        bad = pdir / "evidence-edited.jsonl"
+        lines = (pdir / "evidence.jsonl").read_text().splitlines(True)
+        lines[len(lines) // 2] = lines[len(lines) // 2].replace("a", "b", 1)
+        bad.write_text("".join(lines))
+        r = subprocess.run([cmd[0], "--evidence", str(bad), "--checkpoints", cmd[4], "--pubkey", cmd[6]], capture_output=True, text=True)
+        check(r.returncode != 0, "the verifier accepted an edited audit pack")
+        print("    the audit pack verifies on its own with the stand-alone verifier, and an edited copy does not")
+
+        incidents = self.get(self.admins, f"/v1/{ORG}/incidents").json()["incidents"]
+        bp = zipfile.ZipFile(io.BytesIO(self.get(self.admins, f"/v1/{ORG}/incidents/{incidents[0]['incident_id']}/breach-pack").content))
+        report = bp.read("REPORT.md").decode()
+        check("Not a filing and not legal advice" in report and not any(raw in report for raw in RAW), "the breach report is wrong or holds a raw value")
+        print("    a draft breach report is built from the chain, with blanks for the DPO and no raw value")
+
+        policy = self.get(self.admins, f"/v1/orgs/{ORG}/config").json()
+        mig = self.work / "migrations"
+        mig.mkdir()
+        (self.work / "policy.json").write_text(json.dumps(policy))
+        gate = [sys.executable, str(ROOT / "veritas-sdk" / "python" / "veritas_gate.py"), "--migrations", str(mig), "--policy", str(self.work / "policy.json")]
+        (mig / "001.sql").write_text("CREATE TABLE audit (id int, created_at timestamp);")
+        check(subprocess.run(gate, capture_output=True).returncode == 0, "the gate failed a harmless migration")
+        (mig / "002.sql").write_text("ALTER TABLE audit ADD COLUMN passport_number text;")
+        r = subprocess.run(gate, capture_output=True, text=True)
+        check(r.returncode == 1 and "passport" in r.stdout, f"the gate let an undeclared personal-data column through: {r.stdout}")
+        print("    the pipeline gate fails a migration that adds an undeclared personal-data column and passes a harmless one")
+
+        before = self.get(self.admins, f"/v1/orgs/{ORG}/config").json()
+        packs = self.get(self.admins, "/v1/policy-packs").json()["packs"]
+        check({p["id"] for p in packs} == {"fintech", "healthtech", "ecommerce"}, "the policy packs are missing")
+        pv = self.post(self.admins, f"/v1/{ORG}/policy-packs/ecommerce/preview", json={}).json()
+        check(pv["unreviewed"] and pv["added"] and not pv["errors"], "the pack preview is wrong")
+        check(self.get(self.admins, f"/v1/orgs/{ORG}/config").json() == before, "a preview changed the policy")
+        check(self.post(self.admins, f"/v1/{ORG}/policy-packs/ecommerce/apply", expect=(409,), json={}).status_code == 409,
+              "an unreviewed pack was applied without the acknowledgement")
+        print("    a policy pack previews what it would add, saves nothing, and will not apply unreviewed without being told")
+
         step("tamper (F1): the server is stopped, one verdict is edited with every later hash recomputed, another organization loses its tail")
         self.stop_server()
         for a in self.agents:

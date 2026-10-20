@@ -4,6 +4,13 @@ What changed in each release, in plain language. The newest release is first. Ev
 
 ## Unreleased (1.2.0)
 
+### Standing out: proof, prevention, breach readiness, industry packs
+- **Audit pack** (`GET /v1/{org}/audit-pack`, dashboard button): one zip with the evidence, signed checkpoints, public key, a plain summary, verify scripts and (optionally) the verifier, checkable offline. See `docs/AUDIT_PACK.md`.
+- **Pipeline gate for migrations:** `veritas_gate.py --migrations DIR --policy FILE` fails a build when a migration leaves a personal-data column the policy does not declare; a GitHub Action wraps it. See `docs/PIPELINE_GATE.md`.
+- **Breach pack** (`GET /v1/{org}/incidents/{id}/breach-pack`): a draft report built from the chain, with blanks for the DPO and counsel. Not legal advice. See `docs/BREACH_PACK.md`.
+- **Industry policy packs** (fintech, healthtech, e-commerce; preview and apply, API only): draft, unreviewed by counsel. See `docs/POLICY_PACKS.md`.
+- The end-to-end scenario now checks all four, including the real verifier accepting the audit pack and rejecting an edited copy.
+
 Work towards full alignment with the problem statement (`docs/PS_ALIGNMENT_PLAN.md`; the score and the evidence are in `docs/PS_ALIGNMENT_STATUS.md`). The demo (`docs/DEMO.md`) has new moments for the schema change, the leaky API, retention and notices.
 
 - **Phase A, groundwork:** fields named by a path, as API payloads name them (`user.phone`, `items[0].mobile`), now match the declared field and its validator. Events can say how they arrived (`source_kind`: log, api, schema or otlp) and the data map records it. The rule id `NOTICE_001` is reserved for the notice check (Phase E). `scope.md` now says what is observed in telemetry and what is not.

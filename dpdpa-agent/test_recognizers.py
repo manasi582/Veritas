@@ -43,6 +43,12 @@ def test_the_copies_are_identical_to_the_canonical_file(copy):
     assert (ROOT / copy / "veritas_recognizers.py").read_bytes() == canonical, "run: python tools/sync_recognizers.py"
 
 
+@pytest.mark.parametrize("src,dest", [("parser.py", "veritas_ddl_parser.py"), ("classify.py", "veritas_ddl_classify.py")])
+def test_the_gate_copies_of_the_ddl_modules_are_identical(src, dest):
+    assert (ROOT / "veritas-sdk" / "python" / dest).read_bytes() == (ROOT / "dpdpa-agent" / "schema_watch" / src).read_bytes(), (
+        "run: python tools/sync_recognizers.py")
+
+
 # ---- parity with the server's recognizers --------------------------------------------------------------
 
 def _server_view(text):

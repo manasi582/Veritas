@@ -1,0 +1,178 @@
+{
+  "format": 1,
+  "status": "DRAFT",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "review_note": "A starting point written by the Veritas team. No lawyer has reviewed it. Counsel must confirm every retention period, purpose and consent scope for your organization before it is applied to production.",
+  "id": "fintech",
+  "title": "Lending and payments (fintech)",
+  "industry": "Financial services",
+  "version": "0.1.0",
+  "summary": "A lender or payments app: customer records, KYC, payment processing, support, and an analytics warehouse that should hold little personal data.",
+  "systems": {
+    "customer-db": "Customer accounts and profiles",
+    "kyc-service": "Identity checks and KYC records",
+    "payments-api": "Payment processing and transaction records",
+    "support-desk": "Support tickets and chat",
+    "analytics-warehouse": "Product analytics (should hold almost no personal data)"
+  },
+  "fields": [
+    {
+      "field_name": "name",
+      "pii_category": "name",
+      "source_system": "customer-db",
+      "declared_purpose": "account_servicing",
+      "consent_scope": "service_delivery",
+      "retention_days": 1825,
+      "basis": "Account records are commonly kept for the life of the relationship plus a statutory period; five years is a typical starting value. Confirm."
+    },
+    {
+      "field_name": "phone",
+      "pii_category": "phone",
+      "source_system": "customer-db",
+      "declared_purpose": "account_servicing",
+      "consent_scope": "service_delivery",
+      "retention_days": 1825,
+      "basis": "As above."
+    },
+    {
+      "field_name": "email",
+      "pii_category": "email",
+      "source_system": "customer-db",
+      "declared_purpose": "account_servicing",
+      "consent_scope": "service_delivery",
+      "retention_days": 1825,
+      "basis": "As above."
+    },
+    {
+      "field_name": "aadhaar",
+      "pii_category": "aadhaar",
+      "source_system": "kyc-service",
+      "declared_purpose": "kyc_verification",
+      "consent_scope": "regulatory_compliance",
+      "retention_days": 1825,
+      "basis": "KYC records are generally kept five years after the relationship ends (PMLA and RBI KYC directions). Confirm the exact rule, and the limits on storing Aadhaar numbers."
+    },
+    {
+      "field_name": "pan",
+      "pii_category": "pan",
+      "source_system": "kyc-service",
+      "declared_purpose": "kyc_verification",
+      "consent_scope": "regulatory_compliance",
+      "retention_days": 1825,
+      "basis": "As above."
+    },
+    {
+      "field_name": "dob",
+      "pii_category": "dob",
+      "source_system": "kyc-service",
+      "declared_purpose": "kyc_verification",
+      "consent_scope": "regulatory_compliance",
+      "retention_days": 1825,
+      "basis": "As above."
+    },
+    {
+      "field_name": "address",
+      "pii_category": "address",
+      "source_system": "kyc-service",
+      "declared_purpose": "kyc_verification",
+      "consent_scope": "regulatory_compliance",
+      "retention_days": 1825,
+      "basis": "As above."
+    },
+    {
+      "field_name": "card",
+      "pii_category": "card",
+      "source_system": "payments-api",
+      "declared_purpose": "payment_processing",
+      "consent_scope": "transaction",
+      "retention_days": 1,
+      "basis": "Full card numbers should not be stored by a merchant or app without authorisation (RBI card-on-file tokenisation rules, PCI DSS). One day is a placeholder: any sighting beyond processing is a finding. Confirm."
+    },
+    {
+      "field_name": "upi_id",
+      "pii_category": "upi",
+      "source_system": "payments-api",
+      "declared_purpose": "payment_processing",
+      "consent_scope": "transaction",
+      "retention_days": 1825,
+      "basis": "Transaction records are commonly kept five years. Confirm."
+    },
+    {
+      "field_name": "phone",
+      "pii_category": "phone",
+      "source_system": "support-desk",
+      "declared_purpose": "customer_support",
+      "consent_scope": "service_delivery",
+      "retention_days": 365,
+      "basis": "Support contacts are rarely needed beyond a year after the ticket closes. Your call; confirm."
+    },
+    {
+      "field_name": "email",
+      "pii_category": "email",
+      "source_system": "support-desk",
+      "declared_purpose": "customer_support",
+      "consent_scope": "service_delivery",
+      "retention_days": 365,
+      "basis": "As above."
+    }
+  ],
+  "linkage_rules": [
+    {
+      "fields": [
+        "name",
+        "dob",
+        "address"
+      ],
+      "risk": "LINKAGE_RISK"
+    },
+    {
+      "fields": [
+        "aadhaar",
+        "phone"
+      ],
+      "risk": "LINKAGE_RISK"
+    }
+  ],
+  "notice_suggestions": [
+    {
+      "title": "Customer privacy notice",
+      "data_categories": [
+        "name",
+        "phone",
+        "email"
+      ],
+      "systems": [
+        "customer-db",
+        "support-desk"
+      ]
+    },
+    {
+      "title": "KYC notice",
+      "data_categories": [
+        "aadhaar",
+        "pan",
+        "dob",
+        "address"
+      ],
+      "systems": [
+        "kyc-service"
+      ]
+    },
+    {
+      "title": "Payments notice",
+      "data_categories": [
+        "card",
+        "upi"
+      ],
+      "systems": [
+        "payments-api"
+      ]
+    }
+  ],
+  "watch_for": [
+    "Aadhaar, PAN or card numbers in application logs or in the analytics warehouse (nothing is declared for them there, so Veritas will report them).",
+    "A new personal-data column in a migration for a system whose purpose does not include it (the pipeline gate catches it before release).",
+    "Customer data kept after the account closed, beyond the declared period."
+  ]
+}

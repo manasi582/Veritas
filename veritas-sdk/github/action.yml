@@ -1,0 +1,32 @@
+name: Veritas privacy gate
+description: Fails a pull request that adds a personal-data column the policy does not declare, or puts personal data in an API example.
+inputs:
+  migrations:
+    description: Folder of SQL migrations (PostgreSQL or MySQL)
+    required: false
+    default: ""
+  policy:
+    description: The organization's Veritas policy file (YAML or JSON)
+    required: false
+    default: veritas-policy.yaml
+  openapi:
+    description: OpenAPI files to scan for personal data in examples, space separated
+    required: false
+    default: ""
+  system:
+    description: Only fields declared for this source system count
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - shell: bash
+      run: |
+        pip install --quiet pyyaml
+        args=()
+        [ -n "${{ inputs.migrations }}" ] && args+=(--migrations "${{ inputs.migrations }}" --policy "${{ inputs.policy }}")
+        [ -n "${{ inputs.system }}" ] && args+=(--system "${{ inputs.system }}")
+        python "${{ github.action_path }}/../python/veritas_gate.py" ${{ inputs.openapi }} "${args[@]}"

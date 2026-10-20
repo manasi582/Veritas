@@ -6,6 +6,7 @@ Anchoring and evidence export (phase T1 of docs/TRUST_VISIBILITY_PLAN.md).
   GET  /v1/{org}/anchors/export    the signed checkpoints (JSON lines)             AUDITOR and above, audit-logged
   GET  /v1/{org}/anchors/pubkey    the public key that verifies them               AUDITOR and above
   GET  /v1/{org}/evidence/export   the whole chain (JSON lines)                    AUDITOR and above, audit-logged
+  GET  /v1/{org}/audit-pack        a zip: chain, checkpoints, key, summary, verifier AUDITOR and above, audit-logged
 
 Anchoring is off until configured (docs/ANCHORING.md); the export works either way.
 """
@@ -75,3 +76,30 @@ async def export_evidence(org_id: str, user: User = Depends(org_access(UserRole.
     _audit(user, "EVIDENCE_EXPORTED", org_id, {"records": store.chain_head(org_id)["record_count"]})
     return StreamingResponse(anchor_export.evidence_lines(store, org_id), media_type="application/x-ndjson",
                              headers={"Content-Disposition": f'attachment; filename="{org_id}-evidence.jsonl"'})
+
+
+@router.get("/{org_id}/audit-pack")
+async def audit_pack_download(org_id: str, user: User = Depends(org_access(UserRole.AUDITOR, UserRole.COMPLIANCE_ADMIN))):
+    from audit_pack import pack
+    try:
+        from config_loader import load_org_config
+        policy = load_org_config(org_id)
+    except Exception:
+        policy = None
+    store = get_store()
+    if store.chain_head(org_id)["record_count"] == 0:
+        raise HTTPException(status_code=404, detail="There is no evidence for this organization yet.")
+    _audit(user, "AUDIT_PACK_DOWNLOADED", org_id, {"records": store.chain_head(org_id)["record_count"]})
+    spooled = pack.build(store, org_id, policy)
+
+    def chunks():
+        try:
+            while True:
+                b = spooled.read(1024 * 256)
+                if not b:
+                    break
+                yield b
+        finally:
+            spooled.close()
+    return StreamingResponse(chunks(), media_type="application/zip",
+                             headers={"Content-Disposition": f'attachment; filename="{org_id}-audit-pack.zip"'})

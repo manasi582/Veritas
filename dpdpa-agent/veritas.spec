@@ -74,6 +74,7 @@ a = Analysis(
         ('dashboard/setup.html',               'dashboard'),
         ('dashboard/static',                   'dashboard/static'),
         ('llm_explainer/statute_snippets.json','llm_explainer'),
+        ('policy_packs/packs','policy_packs/packs'),
         ('org_config/configs',                 'org_config/configs'),
         *([('VERSION', '.')] if os.path.exists('VERSION') else []),   # written by the release build
 

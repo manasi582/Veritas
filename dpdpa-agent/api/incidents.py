@@ -8,6 +8,7 @@ Incidents (phase T2 of docs/TRUST_VISIBILITY_PLAN.md).
   POST /v1/{org}/incidents/{id}/status       acknowledge or resolve (a chained event)          COMPLIANCE_ADMIN
   POST /v1/{org}/incidents/{id}/merge        fold another incident into this one               COMPLIANCE_ADMIN
   POST /v1/{org}/incidents/{id}/split        move named verdicts into a new incident           COMPLIANCE_ADMIN
+  GET  /v1/{org}/incidents/{id}/breach-pack  draft breach report (zip), audit-logged               AUDITOR, COMPLIANCE_ADMIN
 """
 from __future__ import annotations
 
@@ -95,6 +96,18 @@ def _one(org_id: str, incident_id: str) -> dict:
 @router.get("/{org_id}/incidents/{incident_id}")
 async def get_incident(org_id: str, incident_id: str, _user: User = Depends(check_org_access)):
     return _one(org_id, incident_id)
+
+
+@router.get("/{org_id}/incidents/{incident_id}/breach-pack")
+async def breach_pack(org_id: str, incident_id: str,
+                      user: User = Depends(org_access(UserRole.AUDITOR, UserRole.COMPLIANCE_ADMIN))):
+    from fastapi.responses import Response
+    from breach_pack import report
+    row = _one(org_id, incident_id)
+    data = report.build_zip(report.gather(get_store(), org_id, row, row.get("owner")))
+    _audit(user, "BREACH_PACK_DOWNLOADED", org_id, incident_id, {"incident_number": row["number"]})
+    return Response(content=data, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{org_id}-incident-{row["number"]}-breach-pack.zip"'})
 
 
 @router.get("/{org_id}/incidents/{incident_id}/verdicts")

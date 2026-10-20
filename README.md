@@ -55,6 +55,10 @@ Step-by-step guides:
 | [docs/STREAMING_RECEIVERS.md](docs/STREAMING_RECEIVERS.md) | OpenTelemetry logs and syslog as ways in, besides files |
 | [docs/NOTICE_REGISTRY.md](docs/NOTICE_REGISTRY.md) | Which privacy notices cover the data declared and observed (coverage, not adequacy), with `NOTICE_001` |
 | [docs/RETENTION_REVIEW.md](docs/RETENTION_REVIEW.md) | Declared retention periods against what is still seen, with warnings and owner tasks (never deletes anything) |
+| [docs/AUDIT_PACK.md](docs/AUDIT_PACK.md) | The zip an auditor checks without Veritas |
+| [docs/PIPELINE_GATE.md](docs/PIPELINE_GATE.md) | Privacy as a build check: migrations and API examples |
+| [docs/BREACH_PACK.md](docs/BREACH_PACK.md) | The draft breach report for the DPO and counsel |
+| [docs/POLICY_PACKS.md](docs/POLICY_PACKS.md) | Industry starting policies (draft, not reviewed by counsel) |
 | [docs/PS_ALIGNMENT_STATUS.md](docs/PS_ALIGNMENT_STATUS.md) | Where the product stands against the problem statement, requirement by requirement, with the evidence |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Measured cost of these features |
 | [docs/legal/](docs/legal/README.md) | Drafts of the license agreement, support policy and data handling statement (for legal review) |

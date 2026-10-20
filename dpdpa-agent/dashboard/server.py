@@ -196,6 +196,8 @@ from api.agents import router as agents_router  # noqa: E402
 app.include_router(agents_router)
 from api.anchors import router as anchors_router  # noqa: E402
 app.include_router(anchors_router)
+from api.policy_packs import router as policy_packs_router  # noqa: E402
+app.include_router(policy_packs_router)
 from api.incidents import router as incidents_router  # noqa: E402
 app.include_router(incidents_router)
 from api.flows import router as flows_router  # noqa: E402

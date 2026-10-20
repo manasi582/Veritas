@@ -68,3 +68,55 @@ def test_json_output(tmp_path, capsys):
 def test_examples_maps_in_openapi_3_are_read(tmp_path):
     doc = {"paths": {"/x": {"post": {"requestBody": {"content": {"application/json": {"examples": {"a": {"value": {"mobile": PHONE}}}}}}}}}}
     assert run(tmp_path, doc) == 1
+
+
+# ---- migrations against the policy (feature 2) ------------------------------------------------------------------
+
+POLICY = {"org_id": "acme", "fields": [
+    {"field_name": "phone", "pii_category": "phone", "source_system": "orders-db", "declared_purpose": "delivery", "consent_scope": "x"}]}
+
+
+def migrate(tmp_path, *sql, policy=POLICY, extra=()):
+    d = tmp_path / "migrations"
+    d.mkdir(exist_ok=True)
+    for i, text in enumerate(sql, 1):
+        (d / f"{i:03d}.sql").write_text(text)
+    pf = tmp_path / "policy.json"
+    pf.write_text(json.dumps(policy))
+    return gate.main(["--migrations", str(d), "--policy", str(pf), *extra])
+
+
+def test_a_new_personal_column_the_policy_does_not_declare_fails(tmp_path, capsys):
+    assert migrate(tmp_path, "CREATE TABLE users (id int, phone text);", "ALTER TABLE users ADD COLUMN aadhaar_number text;") == 1
+    out = capsys.readouterr().out
+    assert "UNDECLARED aadhaar" in out and "users.aadhaar_number" in out and "001.sql" not in out.split("aadhaar_number")[1][:60]
+
+
+def test_declared_columns_and_harmless_ones_pass(tmp_path, capsys):
+    assert migrate(tmp_path, "CREATE TABLE users (id int, phone text, created_at timestamp);") == 0
+
+
+def test_a_column_added_then_dropped_does_not_count(tmp_path):
+    assert migrate(tmp_path, "ALTER TABLE users ADD COLUMN pan_number text;", "ALTER TABLE users DROP COLUMN pan_number;") == 0
+
+
+def test_a_rename_to_a_personal_name_is_caught_and_a_dropped_table_clears_its_columns(tmp_path, capsys):
+    assert migrate(tmp_path, "CREATE TABLE t (id int, ref text);", "ALTER TABLE t RENAME COLUMN ref TO email;") == 1
+    assert migrate(tmp_path, "CREATE TABLE t (id int, email text);", "DROP TABLE t;") == 0
+
+
+def test_schema_hints_can_say_a_column_is_not_personal(tmp_path):
+    pol = {**POLICY, "schema_hints": {"contact_*": "none"}}
+    assert migrate(tmp_path, "CREATE TABLE t (contact_person_id int);", policy=pol) == 0
+
+
+def test_the_system_option_limits_which_declarations_count(tmp_path):
+    assert migrate(tmp_path, "CREATE TABLE users (phone text);", extra=("--system", "billing-db")) == 1
+    assert migrate(tmp_path, "CREATE TABLE users (phone text);", extra=("--system", "orders-db")) == 0
+
+
+def test_missing_policy_or_files_is_a_usage_error_not_a_pass(tmp_path):
+    assert gate.main(["--migrations", str(tmp_path)]) == 2
+    pf = tmp_path / "p.json"
+    pf.write_text(json.dumps(POLICY))
+    assert gate.main(["--migrations", str(tmp_path / "nothing"), "--policy", str(pf)]) == 2

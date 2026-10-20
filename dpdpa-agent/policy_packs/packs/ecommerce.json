@@ -1,0 +1,171 @@
+{
+  "format": 1,
+  "status": "DRAFT",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "review_note": "A starting point written by the Veritas team. No lawyer has reviewed it. Counsel must confirm every retention period, purpose and consent scope for your organization before it is applied to production.",
+  "id": "ecommerce",
+  "title": "Online retail (e-commerce)",
+  "industry": "Retail",
+  "version": "0.1.0",
+  "summary": "An online store with its own orders system, a logistics partner, a marketing tool and support.",
+  "systems": {
+    "customer-db": "Customer accounts",
+    "orders-api": "Orders, payments and invoices",
+    "logistics-partner": "Delivery partner's system",
+    "marketing": "Email and messaging campaigns",
+    "support-desk": "Support tickets and chat"
+  },
+  "fields": [
+    {
+      "field_name": "name",
+      "pii_category": "name",
+      "source_system": "customer-db",
+      "declared_purpose": "order_fulfilment",
+      "consent_scope": "service_delivery",
+      "retention_days": 1095,
+      "basis": "Account records are kept while the account is active; three years of inactivity is a placeholder. Confirm."
+    },
+    {
+      "field_name": "phone",
+      "pii_category": "phone",
+      "source_system": "customer-db",
+      "declared_purpose": "order_fulfilment",
+      "consent_scope": "service_delivery",
+      "retention_days": 1095,
+      "basis": "As above."
+    },
+    {
+      "field_name": "email",
+      "pii_category": "email",
+      "source_system": "customer-db",
+      "declared_purpose": "order_fulfilment",
+      "consent_scope": "service_delivery",
+      "retention_days": 1095,
+      "basis": "As above."
+    },
+    {
+      "field_name": "address",
+      "pii_category": "address",
+      "source_system": "orders-api",
+      "declared_purpose": "delivery",
+      "consent_scope": "service_delivery",
+      "retention_days": 2190,
+      "basis": "Order and invoice records are commonly kept about six years for tax purposes (GST record rules). Confirm."
+    },
+    {
+      "field_name": "phone",
+      "pii_category": "phone",
+      "source_system": "orders-api",
+      "declared_purpose": "delivery",
+      "consent_scope": "service_delivery",
+      "retention_days": 2190,
+      "basis": "As above."
+    },
+    {
+      "field_name": "card",
+      "pii_category": "card",
+      "source_system": "orders-api",
+      "declared_purpose": "payment_processing",
+      "consent_scope": "transaction",
+      "retention_days": 1,
+      "basis": "Full card numbers should not be stored without authorisation (RBI tokenisation rules, PCI DSS). One day is a placeholder: any sighting beyond processing is a finding. Confirm."
+    },
+    {
+      "field_name": "address",
+      "pii_category": "address",
+      "source_system": "logistics-partner",
+      "declared_purpose": "delivery",
+      "consent_scope": "service_delivery",
+      "retention_days": 90,
+      "basis": "A courier needs the address only until delivery and the return window end. Placeholder; confirm with the contract."
+    },
+    {
+      "field_name": "phone",
+      "pii_category": "phone",
+      "source_system": "logistics-partner",
+      "declared_purpose": "delivery",
+      "consent_scope": "service_delivery",
+      "retention_days": 90,
+      "basis": "As above."
+    },
+    {
+      "field_name": "email",
+      "pii_category": "email",
+      "source_system": "marketing",
+      "declared_purpose": "marketing_communications",
+      "consent_scope": "marketing_consent",
+      "retention_days": 365,
+      "basis": "Marketing needs its own consent, withdrawable at any time: the scope is deliberately separate. Confirm."
+    },
+    {
+      "field_name": "phone",
+      "pii_category": "phone",
+      "source_system": "marketing",
+      "declared_purpose": "marketing_communications",
+      "consent_scope": "marketing_consent",
+      "retention_days": 365,
+      "basis": "As above."
+    },
+    {
+      "field_name": "email",
+      "pii_category": "email",
+      "source_system": "support-desk",
+      "declared_purpose": "customer_support",
+      "consent_scope": "service_delivery",
+      "retention_days": 365,
+      "basis": "Placeholder; confirm."
+    }
+  ],
+  "linkage_rules": [
+    {
+      "fields": [
+        "name",
+        "address",
+        "phone"
+      ],
+      "risk": "LINKAGE_RISK"
+    }
+  ],
+  "notice_suggestions": [
+    {
+      "title": "Customer privacy notice",
+      "data_categories": [
+        "name",
+        "phone",
+        "email",
+        "address"
+      ],
+      "systems": [
+        "customer-db",
+        "orders-api",
+        "support-desk"
+      ]
+    },
+    {
+      "title": "Marketing notice",
+      "data_categories": [
+        "email",
+        "phone"
+      ],
+      "systems": [
+        "marketing"
+      ]
+    },
+    {
+      "title": "Delivery partner notice",
+      "data_categories": [
+        "address",
+        "phone"
+      ],
+      "systems": [
+        "logistics-partner"
+      ]
+    }
+  ],
+  "watch_for": [
+    "Addresses and phone numbers reaching the marketing tool without marketing consent.",
+    "The delivery partner's data kept after delivery.",
+    "Card numbers in order logs."
+  ]
+}
