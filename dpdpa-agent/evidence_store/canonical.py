@@ -37,7 +37,8 @@ COMMENT = "COMMENT"
 INCIDENT_EVENT = "INCIDENT_EVENT"
 RIGHTS_EVENT = "RIGHTS_EVENT"
 RULE_EVENT = "RULE_EVENT"
-RECORD_TYPES = (VERDICT, STATUS_CHANGE, COMMENT, INCIDENT_EVENT, RIGHTS_EVENT, RULE_EVENT)
+RESTORE_EVENT = "RESTORE_EVENT"
+RECORD_TYPES = (VERDICT, STATUS_CHANGE, COMMENT, INCIDENT_EVENT, RIGHTS_EVENT, RULE_EVENT, RESTORE_EVENT)
 
 
 # --------------------------------------------------------------------------- canonical JSON
@@ -170,6 +171,20 @@ def rule_event_body(org: str, seq: int, event_id: str, change_id: str, action: s
     return {"type": RULE_EVENT, "org": org, "seq": seq, "event_id": event_id, "change_id": change_id, "action": action,
             "actor": actor, "kind": kind, "target": target, "setting": setting, "expires_at": expires_at,
             "self_approved": self_approved, "reason": reason or None, "at": rfc3339_ms(at)}
+
+
+def restore_event_body(org: str, seq: int, event_id: str, backup: str, restored_at: datetime, records_before: int,
+                       records_after: int, head_before: Optional[str], restored_away: list, at: datetime,
+                       actor: Optional[str] = None) -> Dict[str, Any]:
+    """
+    A restore from a backup: the organization's data was rewound to the backup. It records which backup, how many records the
+    live chain held before and after, the head it had before, and the numbers of the signed checkpoints that described the history
+    that was set aside (`restored_away`). The verifier reads it to tell a recorded restore from tampering: those checkpoints are
+    reported as history that a restore removed, not as a failure. It holds no personal data.
+    """
+    return {"type": RESTORE_EVENT, "org": org, "seq": seq, "event_id": event_id, "backup": backup,
+            "restored_at": rfc3339_ms(restored_at), "records_before": int(records_before), "records_after": int(records_after),
+            "head_before": head_before, "restored_away": [int(n) for n in restored_away], "actor": actor, "at": rfc3339_ms(at)}
 
 
 def legacy_view(body: Dict[str, Any]) -> Dict[str, Any]:

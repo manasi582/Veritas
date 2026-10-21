@@ -113,7 +113,8 @@ def test_only_a_compliance_administrator_can_force_a_checkpoint(tmp_path, monkey
 def test_the_health_card_reports_anchoring_and_only_the_banner_to_others(tmp_path, monkeypatch):
     seed(1)
     admin = client(UserRole.SUPER_ADMIN, "root")
-    assert admin.get("/api/system/health").json()["checks"]["anchoring"]["status"] == "disabled"
+    health = admin.get("/api/system/health").json()["checks"]["anchoring"]
+    assert health["status"] == "disabled" and "rewrite history" in health["detail"]
     monkeypatch.setenv("VERITAS_ANCHOR_DIR", str(tmp_path / "share"))
     reset_manager()
     h = admin.get("/api/system/health").json()["checks"]["anchoring"]

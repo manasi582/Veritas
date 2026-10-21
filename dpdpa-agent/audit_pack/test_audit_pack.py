@@ -76,3 +76,22 @@ def test_summary_lists_the_rules_in_force_and_self_approvals():
     assert s["changes_recorded"] == 1 and s["self_approved"] == 1 and "PURPOSE_001" in s["overlays_in_force"]
     text = z.read("SUMMARY.md").decode()
     assert "## Rules in force" in text and "approved by the person who proposed it" in text
+
+
+def test_verify_md_says_where_to_get_the_verifier_for_this_release(monkeypatch):
+    import veritas_version as version
+    monkeypatch.setattr(version, "get_version", lambda: "1.0.31")
+    seed(1)
+    text = zipfile.ZipFile(io.BytesIO(fetch().content)).read("VERIFY.md").decode()
+    assert "releases/download/v1.0.31/veritas-verify_1.0.31_darwin_arm64" in text and "windows_amd64.exe" in text
+    assert "SHA256SUMS" in text and "RESTORED_HISTORY" in text
+
+
+def test_a_verifier_shipped_with_the_install_goes_into_the_pack(tmp_path, monkeypatch):
+    import runtime_paths
+    (tmp_path / "verifier").mkdir()
+    (tmp_path / "verifier" / "veritas-verify_1.0.31_linux_amd64").write_bytes(b"x")
+    monkeypatch.delenv("VERITAS_VERIFIER_DIR", raising=False)
+    monkeypatch.setattr(runtime_paths, "bundle_root", lambda: tmp_path)
+    seed(1)
+    assert "veritas-verify_1.0.31_linux_amd64" in zipfile.ZipFile(io.BytesIO(fetch().content)).namelist()

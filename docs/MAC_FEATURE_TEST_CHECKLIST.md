@@ -199,7 +199,7 @@ curl -sk -X POST https://localhost:8000/v1/demo_corp/otlp/logs -H "Authorization
   - [ ] `SUMMARY.md` states the chain, open incidents, rules in force, and "what this pack does not prove". It holds no phone number, Aadhaar or e-mail.
   - [ ] Unzip it, copy `veritas-verify_*_darwin_arm64` into the folder as `veritas-verify`, run `./verify.sh`: it says **PASS**.
   - [ ] Change one character in `evidence.jsonl` and run it again: it **fails** and names the record.
-- [ ] Anchoring (optional, `docs/ANCHORING.md`): with two witnesses configured, **Overview**, health card, Anchoring is green after a checkpoint, and checkpoints show as witnessed.
+- [ ] Anchoring (`docs/ANCHORING.md`): until it is configured, **Overview** shows an orange banner saying tamper-evidence is not anchored. With two witnesses configured the banner goes, the health card's Anchoring item is green after a checkpoint, and checkpoints show as witnessed. With checkpoints, a forged record (every later hash recomputed) makes the verifier FAIL.
 
 ## 17. Breach-ready report
 
@@ -241,6 +241,9 @@ fetch('/v1/demo_corp/policy-packs/ecommerce/preview',{method:'POST',headers:{'Co
 ## 21. Operations
 
 - [ ] `sudo veritas backup`, then `sudo veritas backups` lists it and `sudo veritas verify-backup <file>` says it is good.
+- [ ] **Restore:** make a backup, then add a few findings and a user, then `sudo veritas restore <the backup> --dry-run`, then the real restore. The counts return to the backup's, the chain is valid, your current license is kept, and what was replaced is in `backups/pre-restore-<time>/`.
+- [ ] **The restore is recorded:** after the restart, the **System Audit Log** has a `RESTORE` entry (who, which backup, how many records were dropped, the checkpoints set aside), and the evidence chain holds a `RESTORE_EVENT`.
+- [ ] **The verifier explains it:** with anchoring on, `veritas-verify` on a fresh audit pack (and with `--witness-dir` on a witness folder) says **PASS** and prints `RESTORED_HISTORY` naming the backup and the checkpoints set aside. It does not report a witness divergence.
 - [ ] `sudo veritas restart` brings it back and your data is still there.
 - [ ] After a restart, **Verify Cryptographic Hash Chain** is still intact.
 - [ ] `sudo veritas uninstall` removes the program and service and keeps your data; `sudo veritas uninstall --purge-data` removes everything, including the service account (`dscl . -read /Users/_veritas` fails afterwards).

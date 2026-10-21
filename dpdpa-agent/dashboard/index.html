@@ -1613,6 +1613,10 @@
     <!-- Page Content -->
     <div class="page-content">
 
+      <div id="anchorOffBanner" role="note" style="display:none;background:rgba(255,87,34,0.08);border:1px solid var(--high-border);color:var(--text-headings);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;">
+        <b>Tamper-evidence is not anchored yet.</b> The evidence is hash-chained, but nothing outside this server vouches for it: someone with administrator access to the server could rewrite history and recompute every hash, and an auditor's check would still pass. Turn on <b>anchoring</b> with at least two witnesses you do not share an administrator with. See <span class="mono">docs/ANCHORING.md</span>.
+        <button class="btn btn-secondary" style="padding:3px 10px;font-size:11px;margin-left:8px;" onclick="dismissAnchorOff()">Hide for now</button>
+      </div>
       <div id="anchorBanner" role="alert" style="display:none;background:rgba(220,60,60,0.12);border:1px solid var(--high);color:var(--high);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;">
         Evidence anchoring has fallen behind: no checkpoint has reached a witness recently, so records written since the last witnessed checkpoint are not protected against tampering by someone with access to this server. Open the Anchoring item in the health card for the cause.
       </div>
@@ -2804,6 +2808,11 @@ function renderLeaderboard(containerId, counts) {
   `).join('');
 }
 
+function dismissAnchorOff() {
+  try { sessionStorage.setItem('veritas_anchor_off_hidden', '1'); } catch (e) {}
+  const b = document.getElementById('anchorOffBanner'); if (b) b.style.display = 'none';
+}
+
 async function refreshHealth() {
   const container = document.getElementById('healthChecks');
   if (!container) return;
@@ -2831,12 +2840,15 @@ async function refreshHealth() {
         const orgs = Object.values(val.organizations || {});
         const times = orgs.map(o => o.last_witnessed_at).filter(Boolean).sort();
         const pend = orgs.reduce((n, o) => n + (o.unanchored_records || 0), 0);
-        sub = val.status === 'disabled' ? 'off (see docs/ANCHORING.md)'
+        sub = val.status === 'disabled' ? 'off: not vouched for outside this server'
             : (times.length ? 'last witnessed ' + new Date(times[times.length - 1]).toLocaleString() : 'nothing witnessed yet')
               + (pend ? ' · ' + pend + ' record(s) not anchored' : '')
               + (val.single_witness ? ' · one witness only' : '');
         const banner = document.getElementById('anchorBanner');
         if (banner) banner.style.display = val.banner ? 'block' : 'none';
+        const off = document.getElementById('anchorOffBanner');
+        let hidden = false; try { hidden = sessionStorage.getItem('veritas_anchor_off_hidden') === '1'; } catch (e) {}
+        if (off) off.style.display = (val.status === 'disabled' && !hidden && ['SUPER_ADMIN', 'COMPLIANCE_ADMIN', 'AUDITOR'].includes(window.__veritasRole)) ? 'block' : 'none';
       }
       else if (key === 'alerts') {
         sub = (val.channels && val.channels.length ? val.channels.join(' + ') : 'no channel set')

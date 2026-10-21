@@ -2,6 +2,19 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
+## 1.0.31
+
+Fixes from a hands-on test of 1.0.30 on a real Mac (`docs/MAC_TEST_FINDINGS.md`).
+
+- **A restore is now visible.** `veritas restore` leaves a marker; the next start writes a signed `RESTORE_EVENT` into each organization's evidence chain, a `RESTORE` entry into the audit log (who, which backup, how many records the live system dropped), and raises a floor so a checkpoint number is never used twice. `veritas-verify` reads the event and reports the checkpoints that described the set-aside history as `RESTORED_HISTORY` (information, PASS) instead of a witness divergence. Before, a legitimate restore looked exactly like tampering and left no trace. See `docs/ANCHORING.md`.
+- **Refused requests are audited.** Every role or organization refusal on an authenticated route is recorded as `ACCESS_DENIED` with the result `DENIED` (one entry per person and route every 10 seconds). The identifier-lookup refusal is no longer recorded as a success. The audit log now records the caller's address; a forwarded address is believed only when `VERITAS_TRUSTED_PROXY=true`, and the rate limiter no longer trusts an `X-Forwarded-For` header from anyone.
+- **Anchoring off is now loud.** Administrators and auditors see a banner on every page until anchoring is configured, saying what is at risk. The audit pack's `VERIFY.md` gives the exact verifier downloads for the release, and the pack includes the verifier when the install ships one.
+- **Rules:** an exception's scope is compared ignoring case and says "nothing matched yet" when it covers no finding; the form no longer auto-capitalises.
+- **Breach report** names the kind of data (from the findings' traces) and its labels read properly.
+- **Grouping:** a name the detector found and one it missed are the same place, so one line shape no longer splits into two incidents. (Incidents with a detected name get a new fingerprint: after the upgrade such an incident starts afresh once.)
+- **Pipeline gate:** `user@example.com` and the other reserved example domains are placeholders, not personal data; the summary counts undeclared columns as columns. **Payload Tap:** `register` accepts `--ca-cert`, reads `VERITAS_TAP_CA_CERT`, and `--fetch-cert` saves the server's own certificate, so it works against a default install.
+- **Interface:** the navigation wraps on narrow windows instead of being cut off; one clean outline on form fields; the incident table keeps its columns and compact times; Rights requests have filters (rights, retention, review tasks) so review tasks no longer bury real requests; the new-request form says "Date received" and "Respond by" and refuses a received date in the future; small header text is easier to read.
+
 ## 1.0.30
 
 - **New dashboard look:** a lavender page with a floating cream panel, white rounded cards, pill navigation across the top, and a palette of lime, orange, violet, cream and near-black. A dark theme with lime accents is one click away; light is the default. The sign-in and first-run pages match.

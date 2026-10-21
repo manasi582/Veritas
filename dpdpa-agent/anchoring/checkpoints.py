@@ -68,6 +68,8 @@ class AnchorManager:
                     attempts INTEGER NOT NULL DEFAULT 0, last_attempt TEXT,
                     PRIMARY KEY (checkpoint_id, sink));
                 CREATE INDEX IF NOT EXISTS idx_checkpoints_org ON checkpoints(org, cp_seq);
+                CREATE TABLE IF NOT EXISTS anchor_floor (
+                    org TEXT PRIMARY KEY, floor INTEGER NOT NULL, set_at TEXT NOT NULL);
             """)
             if not conn.execute("SELECT 1 FROM schema_version WHERE version = 3").fetchone():
                 conn.execute("INSERT INTO schema_version (version, name, applied_at) VALUES (3, 'anchoring', ?)",
@@ -112,8 +114,10 @@ class AnchorManager:
             last = self._latest(conn, org)
             if last is not None and last["head_hash"] == head["head_hash"]:
                 return None
+            fl = conn.execute("SELECT floor FROM anchor_floor WHERE org = ?", (org,)).fetchone()
+            floor = fl["floor"] if fl else 0       # after a restore, numbers never repeat one a witness already holds
             body = {"type": "CHECKPOINT", "checkpoint_id": str(uuid.uuid4()),
-                    "cp_seq": (last["cp_seq"] + 1) if last else 1, "org": org, "last_seq": head["last_seq"],
+                    "cp_seq": max(last["cp_seq"] if last else 0, floor) + 1, "org": org, "last_seq": head["last_seq"],
                     "head_hash": head["head_hash"], "record_count": head["record_count"],
                     "created_at": cn.rfc3339_ms(self._clock()), "key_id": key_id}
             if last is not None:
@@ -129,6 +133,12 @@ class AnchorManager:
         self._audit("ANCHOR_CHECKPOINT", org, {"cp_seq": body["cp_seq"], "last_seq": body["last_seq"]})
         self.publish_pending(org)
         return {**body, "signature": signature}
+
+    def raise_floor(self, org: str, floor: int) -> None:
+        """Next checkpoints of `org` are numbered above `floor` (set after a restore, from the numbers it set aside)."""
+        with self.store.writer() as conn:
+            conn.execute("INSERT INTO anchor_floor (org, floor, set_at) VALUES (?, ?, ?) ON CONFLICT(org) DO UPDATE SET "
+                         "floor = MAX(floor, excluded.floor), set_at = excluded.set_at", (org, int(floor), self._clock().isoformat()))
 
     # ------------------------------------------------------------------ witnessing
     def publish_pending(self, org: Optional[str] = None) -> None:

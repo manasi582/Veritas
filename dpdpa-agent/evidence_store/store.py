@@ -693,6 +693,9 @@ class EvidenceStore:
             elif rtype == cn.RULE_EVENT:
                 if row["hash_version"] != 1 or not rule_changes.verify_event(signed, rule_state):
                     return bad(i, "EVENT_INVALID", row["row_index"])
+            elif rtype == cn.RESTORE_EVENT:
+                if row["hash_version"] != 1 or signed.get("org") != tenant_id or not isinstance(signed.get("restored_away"), list):
+                    return bad(i, "EVENT_INVALID", row["row_index"])
             else:
                 return bad(i, "EVENT_INVALID", row["row_index"])
             expected_previous = row["row_hash"]

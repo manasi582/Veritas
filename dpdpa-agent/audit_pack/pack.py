@@ -149,8 +149,17 @@ def summary_markdown(s: Dict[str, Any]) -> str:
 
 VERIFY_MD = """# Checking this pack
 
-You need nothing from Veritas except the files in this folder. No server, no network.
+You need nothing from Veritas except the files in this folder and the small verifier program. No server, no network (apart from
+downloading the verifier once, if it is not already in this folder).
 
+0. **The verifier.** If a file named `veritas-verify` (or `veritas-verify.exe`, or `veritas-verify_<version>_<system>`) is in this folder, use it.
+   Otherwise download the one for your system from the release this pack was made by (Veritas __VERSION__) and check it against the
+   signed `SHA256SUMS` in the same release:
+
+   __DOWNLOADS__
+
+   The verifier is about 600 lines of Go with no dependencies; you can also build it yourself from `tools/veritas-verify` in the source and
+   trust nothing we hand you. Put it in this folder as `veritas-verify` and make it executable (`chmod +x veritas-verify`).
 1. Check the files were not changed since the pack was made:
    - macOS / Linux: `shasum -a 256 -c MANIFEST.sha256`   (or `sha256sum -c MANIFEST.sha256`)
    - Windows (PowerShell): compare `Get-FileHash <file>` with the line for that file in MANIFEST.sha256
@@ -159,14 +168,33 @@ You need nothing from Veritas except the files in this folder. No server, no net
    - macOS / Linux: `./verify.sh`
    - Windows: `verify.bat`
    It reads evidence.jsonl, checkpoints.jsonl and veritas.pub and prints PASS or the first problem.
-   If no verifier binary is in this folder, download the one for your system from the Veritas releases page,
-   or build it from `tools/veritas-verify` (Go, no dependencies), and put it here as `veritas-verify`.
 3. For a stronger check, take the checkpoints to a copy kept somewhere the server cannot reach
-   (the file, syslog, e-mail or timestamp-authority witness described in docs/ANCHORING.md) and compare.
+   (the file, syslog, e-mail or timestamp-authority witness described in docs/ANCHORING.md) and compare:
+   `veritas-verify --evidence evidence.jsonl --checkpoints checkpoints.jsonl --pubkey veritas.pub --witness-dir <the witness folder>`.
 
 Exit code 0 means PASS, 1 means the evidence does not match its checkpoints, 2 means a file was missing or unreadable.
+A line `RESTORED_HISTORY` is information, not a failure: it means the evidence records a restore from a backup and names the checkpoints
+that described the history it set aside. Compare it with your change records.
 The formats are in docs/EVIDENCE_FORMAT.md.
 """
+
+RELEASE_URL = "https://github.com/shreyaaassss/Veritas/releases/download/v{v}/veritas-verify_{v}_{target}"
+VERIFIER_TARGETS = (("macOS, Apple silicon", "darwin_arm64"), ("Linux, 64-bit Intel/AMD", "linux_amd64"),
+                    ("Linux, ARM", "linux_arm64"), ("Windows, 64-bit", "windows_amd64.exe"))
+
+
+def verify_md() -> str:
+    try:
+        from veritas_version import get_version
+        v = str(get_version()).lstrip("v")
+    except Exception:
+        v = ""
+    if not v or v == "dev" or v == "unknown":
+        return VERIFY_MD.replace("(Veritas __VERSION__) ", "").replace("__DOWNLOADS__",
+               "the latest release at https://github.com/shreyaaassss/Veritas/releases (files named `veritas-verify_<version>_<system>`)")
+    lines = "\n   ".join(f"- {label}: {RELEASE_URL.format(v=v, target=t)}" for label, t in VERIFIER_TARGETS)
+    return VERIFY_MD.replace("__VERSION__", v).replace("__DOWNLOADS__", lines)
+
 
 VERIFY_SH = """#!/bin/sh
 # Runs the stand-alone verifier on this pack.
@@ -189,10 +217,21 @@ if "%V%"=="" ( echo veritas-verify.exe not found. See VERIFY.md. & exit /b 2 )
 
 
 def _verifier_files() -> List[Path]:
-    folder = os.environ.get("VERITAS_VERIFIER_DIR")
-    if not folder or not Path(folder).is_dir():
-        return []
-    return sorted(p for p in Path(folder).iterdir() if p.is_file() and p.name.startswith("veritas-verify"))
+    """The verifier binaries to put in the pack: the folder VERITAS_VERIFIER_DIR names, else a `verifier` folder shipped with the install."""
+    folders = []
+    if os.environ.get("VERITAS_VERIFIER_DIR"):
+        folders.append(Path(os.environ["VERITAS_VERIFIER_DIR"]))
+    try:
+        from runtime_paths import bundle_root
+        folders.append(bundle_root() / "verifier")
+    except Exception:
+        pass
+    for folder in folders:
+        if folder.is_dir():
+            found = sorted(p for p in folder.iterdir() if p.is_file() and p.name.startswith("veritas-verify"))
+            if found:
+                return found
+    return []
 
 
 def build(store, org: str, policy=None) -> tempfile.SpooledTemporaryFile:
@@ -205,7 +244,7 @@ def build(store, org: str, policy=None) -> tempfile.SpooledTemporaryFile:
     s = gather(store, org, policy)
     files["summary.json"] = json.dumps(s, indent=2, sort_keys=True, default=str).encode("utf-8")
     files["SUMMARY.md"] = summary_markdown(s).encode("utf-8")
-    files["VERIFY.md"] = VERIFY_MD.encode("utf-8")
+    files["VERIFY.md"] = verify_md().encode("utf-8")
     files["verify.sh"] = VERIFY_SH.encode("utf-8")
     files["verify.bat"] = VERIFY_BAT.encode("utf-8")
     binaries = {p.name: p.read_bytes() for p in _verifier_files()}

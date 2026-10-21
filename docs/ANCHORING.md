@@ -74,6 +74,7 @@ Exit codes: `0` pass, `1` integrity failure, `2` a problem with what you gave it
 | `CHECKPOINT_GAP` | A checkpoint is missing from the sequence |
 | `WITNESS_DIVERGENCE` | A witness copy differs from the server's copy |
 | `UNANCHORED_TAIL` | Information only: records after the last checkpoint are not covered yet |
+| `RESTORED_HISTORY` | Information only: the evidence holds a signed `RESTORE_EVENT` that names these checkpoints as describing history a restore set aside. See "After a restore" below |
 
 ## More witnesses: e-mail, a time-stamp authority, a printable digest
 
@@ -124,3 +125,14 @@ The same steps run in the repository's test suite (`dpdpa-agent/anchoring/test_v
 | "min_witnesses is 2 but only 1 witness" | Add a second witness or lower `min_witnesses`. |
 | Verifier says `CHECKPOINT_GAP` after a restore | Checkpoints made after the backup are not in the restored database. Give the verifier `--witness-dir`: the witnesses still hold them. |
 | Verifier exits 2, "the header says N records but the file holds M" | The export was cut short. Take it again. |
+
+
+## After a restore
+
+Restoring an older backup rewinds the evidence to the moment of the backup. The witnesses still hold the checkpoints made after it, so without more information a legitimate restore is indistinguishable from someone deleting the newest records. Veritas therefore records it:
+
+1. `sudo veritas restore` leaves a small marker (`RESTORE_PENDING.json`) naming the backup, what the live data held (records, chain head) and the numbers of the signed checkpoints that described the history being set aside. It holds counts, hashes and numbers, nothing personal.
+2. At its next start the server writes a signed **`RESTORE_EVENT`** into each organization's chain (the backup, the records before and after, the head before, the checkpoint numbers set aside), an audit-log entry `RESTORE` (who, which backup, how many records were dropped), and raises a floor under the checkpoint numbers, so **no checkpoint number is ever used twice**: after a restore that set aside checkpoints 9 and 10, the next checkpoint is 11.
+3. `veritas-verify` reads the event. Checkpoints 9 and 10, still in the witness folders, and the gap they leave in the server's own numbering, are reported as `RESTORED_HISTORY` (information, result PASS) with the backup and time. A checkpoint the event does **not** name that fails still fails.
+
+What it does not do: it cannot tell whether the restore was *authorised*. The event shows that a restore happened, when, and how much it dropped; compare it with your change records. The data set aside stays in `backups/pre-restore-<time>/` until you delete it.

@@ -40,6 +40,7 @@ The backup file can be anywhere (a USB drive, a network share, your home folder)
 
 What `restore` does, so it is safe to use:
 
+- Afterwards the restore is **recorded**: the next start writes a signed `RESTORE_EVENT` into the evidence chain and a `RESTORE` entry into the audit log (who, which backup, how many records the live system dropped), and the verifier reports the set-aside checkpoints as information. See [ANCHORING.md](ANCHORING.md#after-a-restore).
 - It checks the file first (checksums, that every database inside is healthy, that the file was not made by a *newer* Veritas than the one installed). A damaged or unsuitable backup is refused **before anything is changed**.
 - It refuses to run while the service is answering, because replacing databases under a running server corrupts them. The command stops the service for you.
 - What it replaces is copied to `backups/pre-restore-<time>/` inside the data folder first. If anything fails part-way, everything is put back automatically. Delete the `pre-restore-*` folder when you are satisfied (it holds old secrets and certificates).

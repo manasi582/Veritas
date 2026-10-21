@@ -100,7 +100,20 @@ def _hint(masked: str) -> Optional[str]:
     return " · ".join(parts)[:160] or None
 
 
+_NAME_PLACEHOLDER = "<PII:NAME>"
+_REPEATED_WILDCARD = re.compile(r"<\*>(?: <\*>)+")
+
+
+def _grouping_form(template: str) -> str:
+    """
+    The template as it is compared for grouping. A name the detector found (<PII:NAME>) and a capitalised word it did not find
+    (<*>) are the same place in the same line, so they count as the same: otherwise one line shape splits into two incidents
+    depending on whether the language model happened to recognise a name that day. The displayed template is unchanged.
+    """
+    return _REPEATED_WILDCARD.sub("<*>", template.replace(_NAME_PLACEHOLDER, "<*>"))
+
+
 def fingerprint(org: str, rule_id: str, source_system: str, field: str, template: str) -> str:
     """Same finding of the same kind in the same place gives the same fingerprint. 32 hex characters."""
-    material = "\n".join(("veritas-incident-v1", org, rule_id, source_system, field, template))
+    material = "\n".join(("veritas-incident-v1", org, rule_id, source_system, field, _grouping_form(template)))
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]

@@ -483,6 +483,12 @@ def restore_backup(backup_path: Path, *, dry_run: bool = False,
         shutil.rmtree(staging, ignore_errors=True)
 
     result["success"] = True
+    try:     # a rewind must be visible to the chain, the audit log and the verifier: the server records it at its next start
+        import restore_notice
+        before = (safety / "evidence.db") if result.get("safety_copy") else None
+        restore_notice.write_marker(root, backup_path, before, root / "evidence.db")
+    except Exception as e:                           # pragma: no cover - the restore itself succeeded
+        result["warnings"].append(f"The restore was not recorded for the audit trail ({e}).")
     logger.info("RESTORE complete: %d files restored, %d skipped; previous data kept in %s",
                 len(result["restored_files"]), len(result["skipped_files"]), result["safety_copy"])
     return result

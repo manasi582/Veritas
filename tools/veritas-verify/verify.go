@@ -25,7 +25,8 @@ const (
 	CodeSignature      = "SIGNATURE_INVALID"
 	CodeGap            = "CHECKPOINT_GAP"
 	CodeWitness        = "WITNESS_DIVERGENCE"
-	CodeUnanchoredTail = "UNANCHORED_TAIL" // information only
+	CodeUnanchoredTail = "UNANCHORED_TAIL"  // information only
+	CodeRestored       = "RESTORED_HISTORY" // information only: a restore recorded in the chain explains checkpoints that do not match
 )
 
 type Finding struct {
@@ -244,6 +245,10 @@ func verify(o options) (*Report, error) {
 	prev := genesisHash
 	hashAt := map[int64]string{0: genesisHash}
 	chainOK := true
+	// A RESTORE_EVENT in the verified chain names the checkpoints that described history a recorded restore set aside.
+	// Only events before any break are believed.
+	away := map[int64]bool{}
+	var restoreNote string
 	for i, r := range ev.Records {
 		if r.Seq != int64(i+1) {
 			fail(CodeChainBreak, r.Seq, "record %d is at position %d: a record is missing or out of order", r.Seq, i+1)
@@ -284,6 +289,17 @@ func verify(o options) (*Report, error) {
 		}
 		prev = r.Hash
 		hashAt[r.Seq] = r.Hash
+		if r.Type == "RESTORE_EVENT" && r.Body != nil {
+			if list, ok := r.Body["restored_away"].([]interface{}); ok {
+				for _, v := range list {
+					if n, ok := num(v); ok {
+						away[n] = true
+					}
+				}
+			}
+			restoreNote = fmt.Sprintf("a restore from %q at %s is recorded in the chain (record %d): the live chain held %d record(s), it had held %d",
+				str(r.Body, "backup"), str(r.Body, "restored_at"), r.Seq, restoreRecords(r.Body["records_after"]), restoreRecords(r.Body["records_before"]))
+		}
 	}
 
 	// checkpoints: the exported ones, then the witnesses' copies
@@ -305,6 +321,11 @@ func verify(o options) (*Report, error) {
 				continue
 			}
 			s, _ := num(w["cp_seq"])
+			if away[s] {
+				if have, ok := bySeq[s]; !ok || func() bool { a, _ := canonicalJSON(have); b, _ := canonicalJSON(w); return a != b }() {
+					continue // the witness holds the set-aside history: explained by the recorded restore
+				}
+			}
 			if have, ok := bySeq[s]; ok {
 				a, _ := canonicalJSON(have)
 				b, _ := canonicalJSON(w)
@@ -341,7 +362,15 @@ func verify(o options) (*Report, error) {
 			fail(CodeGap, 0, "the first checkpoint available is %d: checkpoint(s) before it are missing", s)
 		}
 		if i > 0 && s != seqs[i-1]+1 {
-			fail(CodeGap, 0, "checkpoints %d to %d are missing", seqs[i-1]+1, s-1)
+			all := true
+			for n := seqs[i-1] + 1; n < s; n++ {
+				if !away[n] {
+					all = false
+				}
+			}
+			if !all {
+				fail(CodeGap, 0, "checkpoints %d to %d are missing", seqs[i-1]+1, s-1)
+			}
 		}
 		if i > 0 && s == seqs[i-1]+1 && str(cp, "prev_checkpoint_hash") != prevHash {
 			fail(CodeGap, 0, "checkpoint %d does not link to checkpoint %d", s, s-1)
@@ -378,12 +407,32 @@ func verify(o options) (*Report, error) {
 		rep.Findings = append(rep.Findings, Finding{Code: CodeUnanchoredTail, Message: fmt.Sprintf("%d record(s) after the last checkpoint are not anchored yet", n)})
 	}
 
+	if len(away) > 0 {
+		nums := make([]int64, 0, len(away))
+		for n := range away {
+			nums = append(nums, n)
+		}
+		sort.Slice(nums, func(i, j int) bool { return nums[i] < nums[j] })
+		list := make([]string, len(nums))
+		for i, n := range nums {
+			list[i] = fmt.Sprintf("%d", n)
+		}
+		rep.Findings = append(rep.Findings, Finding{Code: CodeRestored, Message: fmt.Sprintf(
+			"checkpoint(s) %s described history that was set aside: %s. This is information, not a failure; compare the restore with your change records",
+			strings.Join(list, ", "), restoreNote)})
+	}
+
 	for _, f := range rep.Findings {
-		if f.Code != CodeUnanchoredTail {
+		if f.Code != CodeUnanchoredTail && f.Code != CodeRestored {
 			rep.Result = "FAIL"
 		}
 	}
 	return rep, nil
+}
+
+func restoreRecords(v interface{}) int64 {
+	n, _ := num(v)
+	return n
 }
 
 func firstBroken(r *Report) int64 {

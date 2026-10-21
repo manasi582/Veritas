@@ -284,3 +284,25 @@ def test_the_incident_events_are_in_the_export_for_the_stand_alone_verifier(stor
     kinds = [r.get("record_type") or r.get("type") for r in (json.loads(x) if isinstance(x, str) else x
                                                               for x in store.export_records(ORG))]
     assert cn.INCIDENT_EVENT in kinds
+
+
+# ---- a detected name and an undetected one are the same place (found in the Mac test) ---------------------------
+
+def test_a_line_with_a_detected_name_and_the_same_line_with_a_missed_one_group_together():
+    from incidents.template import fingerprint, template_of
+    from detection.models import MatchedEntity
+    line = "2026-10-21 12:44:14 DEBUG signup form posted: name=Ravi Kumar phone=9876543210 email=a@x.io"
+    name = MatchedEntity(field="raw_snippet", entity_type="PERSON", matched_text="Ravi Kumar", start=line.index("Ravi"), end=line.index("Ravi") + 10,
+                         confidence=0.9, validation_status="pattern_match")
+    found = template_of(line, [name])
+    missed = template_of(line, [])
+    assert "<PII:NAME>" in found.text and "<PII:NAME>" not in missed.text      # the two templates differ as displayed
+    args = ("org", "EXPOSURE_001", "web-backend", "raw_snippet")
+    assert fingerprint(*args, found.text) == fingerprint(*args, missed.text)   # but they are one incident
+
+
+def test_a_name_in_a_different_place_is_still_a_different_incident():
+    from incidents.template import fingerprint
+    args = ("org", "EXPOSURE_001", "web-backend", "raw_snippet")
+    assert fingerprint(*args, "signup name=<PII:NAME> phone=<PII:PHONE>") != fingerprint(*args, "payment for <PII:NAME> failed, phone=<PII:PHONE>")
+    assert fingerprint(*args, "callback by <PII:NAME> <*> on <PII:PHONE>") == fingerprint(*args, "callback by <*> on <PII:PHONE>")

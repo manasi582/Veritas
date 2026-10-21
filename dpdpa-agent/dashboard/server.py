@@ -820,7 +820,9 @@ async def system_health(_user: User = Depends(get_current_user)):
         from anchoring.checkpoints import get_manager as _anchor_manager
         _am = _anchor_manager()
         if _am is None:
-            checks["anchoring"] = {"status": "disabled", "banner": False}
+            checks["anchoring"] = {"status": "disabled", "banner": False,
+                                   "detail": "Not configured: the evidence is hash-chained, but nothing outside this server vouches for it, "
+                                             "so someone with administrator access to the server could rewrite history and recompute every hash."}
         else:
             _st = _am.status()
             checks["anchoring"] = {"status": "error" if _st["banner"] else "ok", "banner": _st["banner"],
@@ -911,6 +913,13 @@ async def startup_event():
     rule_scheduler.start()   # ends expired exceptions, sends escalations (every minute)
     from anchoring.checkpoints import get_manager as _anchor_manager
     _am = _anchor_manager()
+    try:    # a restore since the last start is recorded in the chain and the audit log before anything new is anchored
+        import restore_notice
+        from evidence_store.store import get_store as _get_store
+        from runtime_paths import data_root as _data_root
+        restore_notice.apply_pending(_get_store(), _data_root(), _am)
+    except Exception:
+        logger.warning("could not record a pending restore", exc_info=True)
     if _am is not None:
         _am.start()          # checkpoints of the evidence chain, copied to witnesses outside this server
     import threading as _threading
