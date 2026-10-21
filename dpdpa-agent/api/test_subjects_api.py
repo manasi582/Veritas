@@ -86,10 +86,12 @@ def test_a_viewer_cannot_read_requests_or_records_but_an_auditor_can():
 
 
 def test_a_refused_lookup_is_audited():
+    """A refusal is recorded centrally as ACCESS_DENIED with the result DENIED, and never holds the identifier."""
     client(UserRole.VIEWER, "snoop").post(f"/v1/{ORG}/subjects/lookup", json={"category": "phone", "identifier": PHONE})
     from audit_log.store import get_audit_store
-    entries = get_audit_store().query(action="SUBJECT_LOOKUP", org_id=ORG)
-    assert entries and "denied" in json.dumps(entries[0], default=str) and PHONE not in json.dumps(entries, default=str)
+    entries = [e for e in get_audit_store().query(action="ACCESS_DENIED") if e["actor_name"] == "snoop"]
+    assert entries and entries[0]["result"] == "DENIED" and entries[0]["resource"].endswith("/subjects/lookup")
+    assert PHONE not in json.dumps(entries, default=str)
 
 
 # ---- lookup ----------------------------------------------------------------------------------------------------

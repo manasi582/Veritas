@@ -38,8 +38,9 @@ def test_only_examples_are_read_not_descriptions_or_paths(tmp_path):
 
 
 def test_allowed_kinds_are_let_through(tmp_path):
-    assert run(tmp_path, spec(EMAIL)) == 1
-    assert run(tmp_path, spec(EMAIL), "--allow", "email") == 0
+    real = "asha.rao@gmail.com"                  # not a reserved example domain: example.com is a placeholder and is not flagged
+    assert run(tmp_path, spec(real)) == 1
+    assert run(tmp_path, spec(real), "--allow", "email") == 0
 
 
 def test_a_folder_of_sample_payloads_is_read_whole(tmp_path, capsys):
@@ -120,3 +121,22 @@ def test_missing_policy_or_files_is_a_usage_error_not_a_pass(tmp_path):
     pf = tmp_path / "p.json"
     pf.write_text(json.dumps(POLICY))
     assert gate.main(["--migrations", str(tmp_path / "nothing"), "--policy", str(pf)]) == 2
+
+
+# ---- placeholders and wording (found in the Mac test) ----------------------------------------------------------
+
+def test_an_example_dot_com_address_is_a_placeholder_but_a_real_domain_is_not(tmp_path, capsys):
+    for placeholder in ("user@example.com", "a.b@mail.example.org", "dev@host.test", "x@corp.example"):
+        doc = {"paths": {"/a": {"get": {"responses": {"200": {"content": {"application/json": {"example": {"email": placeholder}}}}}}}}}
+        assert run(tmp_path, doc) == 0, placeholder
+    spec_ok = {"paths": {"/a": {"get": {"responses": {"200": {"content": {"application/json": {"example": {"email": "user@example.com"}}}}}}}}}
+    assert run(tmp_path, spec_ok) == 0
+    spec_bad = {"paths": {"/a": {"get": {"responses": {"200": {"content": {"application/json": {"example": {"email": "asha.rao@gmail.com"}}}}}}}}}
+    assert run(tmp_path, spec_bad) == 1
+    assert "asha.rao@gmail.com" not in capsys.readouterr().out
+
+
+def test_the_summary_says_columns_for_undeclared_columns(tmp_path, capsys):
+    migrate(tmp_path, "ALTER TABLE users ADD COLUMN passport_number text;")
+    out = capsys.readouterr().out
+    assert "0 personal-data value(s) found, 1 undeclared personal-data column(s)" in out

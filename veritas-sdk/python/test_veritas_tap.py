@@ -303,3 +303,56 @@ def test_wsgi_leaves_non_json_alone():
         return [PHONE.encode()]
     _, out = run_wsgi(vt.WSGIMiddleware(app, tap), body=b"x=1", ctype="application/x-www-form-urlencoded")
     assert out == PHONE.encode() and drain(tap) == []
+
+
+# ---- registering against a server that uses Veritas's own certificate (found in the Mac test) --------------------
+
+def test_register_trusts_the_certificate_it_is_given(monkeypatch, tmp_path):
+    import json, ssl, urllib.request
+    import veritas_tap as vt
+    seen = {}
+
+    class R:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return json.dumps({"auth_token": "tok", "event_endpoint": "/v1/acme/events"}).encode()
+
+    def fake_urlopen(req, timeout=None, context=None):
+        seen["context"] = context
+        return R()
+    pem = tmp_path / "server.crt"
+    monkeypatch.setattr(vt, "_tls_context", lambda ca: ("ctx-for", ca))
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    out = vt.register("https://veritas.example:8000", "key", ca_cert=str(pem))
+    assert seen["context"] == ("ctx-for", str(pem)) and out["VERITAS_TAP_CA_CERT"] == str(pem) and out["VERITAS_TAP_ORG"] == "acme"
+    monkeypatch.setenv("VERITAS_TAP_CA_CERT", "/etc/from-env.crt")
+    vt.register("https://veritas.example:8000", "key")
+    assert seen["context"] == ("ctx-for", "/etc/from-env.crt")
+
+
+def test_an_untrusted_certificate_gets_a_message_that_says_what_to_do(monkeypatch):
+    import ssl, urllib.error, urllib.request
+    import veritas_tap as vt
+
+    def refuse(req, timeout=None, context=None):
+        raise urllib.error.URLError(ssl.SSLCertVerificationError("self-signed certificate"))
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    monkeypatch.delenv("VERITAS_TAP_CA_CERT", raising=False)
+    try:
+        vt.register("https://veritas.example:8000", "key")
+        assert False, "should have stopped"
+    except SystemExit as e:
+        assert "--fetch-cert" in str(e) and "--ca-cert" in str(e)
+
+
+def test_fetch_server_cert_saves_the_public_certificate(monkeypatch, tmp_path):
+    import urllib.request
+    import veritas_tap as vt
+
+    class R:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b"-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----\n"
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=None, context=None: R())
+    p = vt.fetch_server_cert("https://veritas.example:8000", str(tmp_path / "server.crt"))
+    assert open(p, "rb").read().startswith(b"-----BEGIN CERTIFICATE")

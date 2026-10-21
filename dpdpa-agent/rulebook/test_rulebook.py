@@ -259,3 +259,11 @@ def test_the_scheduler_pass_expires_and_escalates_across_organizations():
     e = approved(store, changes.EXCEPTION, exc())
     out = scheduler.run_once(store, send=lambda *a, **k: None)
     assert out == {"expired": 0, "escalated": 0} and changes.get(store, ORG, e["change_id"])["status"] == "APPROVED"
+
+
+def test_an_exception_scope_is_compared_ignoring_case():
+    store = get_store()
+    approved(store, changes.EXCEPTION, exc(system="Orders", field="PHONE*"))
+    out = apply(store, ORG, [verdict(system="orders", field="phone"), verdict(system="ORDERS", field="Phone_2"),
+                             verdict(system="billing", field="phone")], event(), [match()])
+    assert [bool(d.suppressed_by) for d in out] == [True, True, False]

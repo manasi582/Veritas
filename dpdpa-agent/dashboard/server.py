@@ -145,6 +145,21 @@ class _SecurityHeaders(BaseHTTPMiddleware):
         return response
 
 
+class _ClientAddress(BaseHTTPMiddleware):
+    """Keeps the caller's address for the audit log while the request is served."""
+    async def dispatch(self, request: Request, call_next):
+        from request_context import client_ip_of, set_client_ip
+        token = set_client_ip(client_ip_of(request))
+        try:
+            return await call_next(request)
+        finally:
+            try:
+                from request_context import _client_ip
+                _client_ip.reset(token)
+            except Exception:
+                pass
+
+
 app = FastAPI(
     title="Veritas DPDPA Compliance Platform",
     version=_API_VERSION,
@@ -159,6 +174,7 @@ app = FastAPI(
 )
 
 app.add_middleware(_SecurityHeaders)
+app.add_middleware(_ClientAddress)
 app.add_middleware(_BodySizeLimit)
 app.add_middleware(
     CORSMiddleware,

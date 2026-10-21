@@ -19,6 +19,16 @@ from db_encryption import decrypt_field
 from evidence_store import canonical as cn
 
 TO_COMPLETE = "TO COMPLETE BY THE DPO / COUNSEL"
+LABELS = {
+    "nature_of_the_breach": "Nature of the breach",
+    "number_of_data_principals_affected": "Number of Data Principals affected",
+    "likely_consequences": "Likely consequences",
+    "measures_taken_and_planned": "Measures taken and planned",
+    "contact_of_the_dpo": "Contact of the DPO",
+    "date_and_time_the_organization_became_aware": "Date and time the organization became aware",
+    "notified_data_principals": "Notified the Data Principals",
+    "notified_the_board": "Notified the Board",
+}
 
 
 def _parse(ts: Optional[str]) -> Optional[datetime]:
@@ -55,11 +65,27 @@ def events_of(store, org: str, incident_id: str) -> List[Dict[str, Any]]:
 
 
 def kinds_of(store, org: str, incident_id: str, limit: int = 500) -> Dict[str, int]:
-    """Kinds of personal data behind the incident, counted over its verdicts (names of kinds only)."""
+    """
+    Kinds of personal data behind the incident, counted over its findings (names of kinds only). The finding's trace records the
+    kind for every rule ("kind_of_data"); an older finding without a trace falls back to the stored registry entry.
+    """
     counts: Counter = Counter()
+    with store._lock:
+        rows = store._conn.execute(
+            "SELECT t.trace_json FROM verdict_trace t JOIN verdict_incident vi ON vi.verdict_id = t.verdict_id "
+            "WHERE vi.tenant_id = ? AND vi.incident_id = ? LIMIT ?", (org, incident_id, limit)).fetchall()
+    for r in rows:
+        try:
+            kind = (json.loads(r["trace_json"]).get("context") or {}).get("kind_of_data")
+        except ValueError:
+            kind = None
+        if kind:
+            counts[str(kind)] += 1
+    if counts:
+        return dict(counts)
     for v in store.incident_verdicts(org, incident_id, limit=limit) if hasattr(store, "incident_verdicts") else []:
         m = v.get("matched_registry_entry") or {}
-        kind = m.get("category") if isinstance(m, dict) else None
+        kind = (m.get("category") or m.get("pii_category")) if isinstance(m, dict) else None
         if kind:
             counts[str(kind)] += 1
     return dict(counts)
@@ -98,7 +124,7 @@ def gather(store, org: str, incident: Dict[str, Any], owner: Optional[Dict[str, 
 def markdown(r: Dict[str, Any]) -> str:
     i = r["incident"]
     d = r["durations"]
-    kinds = ", ".join(f"{k} ({n} findings)" for k, n in sorted(r["data_kinds"].items())) or "not recorded in the findings"
+    kinds = ", ".join(f"{k} ({n} finding{'s' if n != 1 else ''})" for k, n in sorted(r["data_kinds"].items())) or "not recorded in the findings"
     L = [
         f"# Draft breach report: incident #{i['number']}, {r['organization']}",
         "",
@@ -129,7 +155,7 @@ def markdown(r: Dict[str, Any]) -> str:
     L += ["", "## To be completed by people", "",
           "Veritas cannot know these. They are left blank on purpose.", ""]
     for k, v in r["to_complete"].items():
-        L.append(f"- **{k.replace('_', ' ').capitalize()}:** {v}")
+        L.append(f"- **{LABELS.get(k, k.replace('_', ' ').capitalize())}:** {v}")
     L += ["", "## How to check this", "",
           f"The chain head when this was prepared was `{r['chain']['head_hash']}` after {r['chain']['records']} records. "
           "Download the audit pack for the same organization and run the verifier to show these records are the signed ones.", ""]

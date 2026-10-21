@@ -22,9 +22,13 @@ An event from the tap has `source_type: api`. Each reported field is judged by t
 Put the library next to your code (`veritas_tap.py` and `veritas_recognizers.py` from `veritas-sdk/python`; standard library only). Issue a registration key in the dashboard (Agents, Issue Registration Key), then:
 
 ```bash
-python veritas_tap.py register --url https://veritas.example.org:8000 --key <the key>
-# prints VERITAS_TAP_URL, VERITAS_TAP_TOKEN, VERITAS_TAP_ORG; set VERITAS_TAP_SYSTEM yourself to the name your policy uses
+# Veritas makes its own certificate by default. Save it once, then trust exactly that certificate:
+python veritas_tap.py --url https://veritas.example.org:8000 --fetch-cert server.crt
+python veritas_tap.py register --url https://veritas.example.org:8000 --key <the key> --ca-cert server.crt
+# prints VERITAS_TAP_URL, VERITAS_TAP_TOKEN, VERITAS_TAP_ORG, VERITAS_TAP_CA_CERT; set VERITAS_TAP_SYSTEM yourself to the name your policy uses
 ```
+
+(With a company certificate the system already trusts, leave out `--ca-cert`.) `--fetch-cert` reads the server's public certificate without checking it, then every later call trusts only that file, the same trust-on-first-use the agent uses. Compare it with the certificate shown by the server if you need to be certain.
 
 ```python
 from veritas_tap import Tap, ASGIMiddleware, WSGIMiddleware

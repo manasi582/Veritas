@@ -266,3 +266,54 @@ div:has(> #viewIncidents) { display: inline-flex; gap: 2px; padding: 3px; border
 .table-container .table-wrap { box-shadow: none; }
 .table-container { overflow: hidden; }
 .health-item, .health-card, .health-grid > div { border-radius: 14px; }
+
+/* ---------- from the Mac test: small screens, form fields, small text ---------- */
+/* U1: on a narrower window the navigation takes its own row instead of being cut off */
+@media (max-width: 1320px) {
+  .sidebar { flex-wrap: wrap; row-gap: 10px; }
+  .nav-menu { order: 3; flex: 1 1 100%; }
+  .sidebar-footer { margin-left: auto; }
+}
+/* U2: one clean outline on form fields (the old and the new styles were both drawing one) */
+.page-content input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .page-content select, .page-content textarea,
+.modal input:not([type="checkbox"]):not([type="radio"]), .modal select, .modal textarea {
+  background: var(--input-bg);
+  color: var(--text-headings);
+  border: 1px solid var(--border-strong);
+  box-shadow: none;
+  outline: none;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font: inherit;
+}
+.page-content input:focus, .page-content select:focus, .page-content textarea:focus,
+.modal input:focus, .modal select:focus, .modal textarea:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--accent-blue-glow);
+}
+.page-content input::placeholder, .modal input::placeholder { color: var(--text-subtle); }
+/* U6: the incident table gives the line its room and keeps ids and times on one line */
+#incTbody td:nth-child(3) { min-width: 340px; }
+#incTbody td:first-child { white-space: nowrap; }
+.inc-template { line-height: 1.45; }
+/* U7: the small mono text in the header badges and the version pill was too faint */
+.license-badge, .env-badge, .license-badge span { font-size: 11.5px; color: var(--text); letter-spacing: 0; }
+.license-badge span, .env-badge span { font-weight: 600; }
+.badge, .status-badge { font-size: 10.5px; }
+
+/* narrow windows: the navigation wraps onto more rows (nothing is cut or hidden behind a scroll bar),
+   and the incident table drops its least useful column so Status and Action stay on screen */
+@media (max-width: 1320px) {
+  .nav-menu { flex-wrap: wrap; overflow: visible; }
+}
+@media (max-width: 1180px) {
+  #incidentView table th:nth-child(7), #incidentView table td:nth-child(7) { display: none; }
+  #incTbody td:nth-child(3) { min-width: 240px; }
+  .topbar-title { font-size: 20px; }
+}
+@media (max-width: 1180px) {
+  #incTbody td { padding-left: 10px; padding-right: 10px; }
+  #incTbody td:last-child { white-space: normal !important; min-width: 120px; }
+  #incTbody td:last-child .btn { margin: 0 4px 4px 0; }
+  #incidentView table th { padding-left: 10px; padding-right: 10px; }
+}

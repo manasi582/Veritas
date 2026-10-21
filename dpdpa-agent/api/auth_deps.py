@@ -209,6 +209,31 @@ async def get_current_user(request: Request) -> User:
     return user
 
 
+_DENIAL_SEEN: dict = {}
+
+
+def audit_denied(request: Request, user: User, reason: str, required: list, org_id: str = "") -> None:
+    """
+    Record a refused request: who, which route, their role and what was required. One entry per person and route every ten
+    seconds, so a script hammering a closed door cannot fill the audit log. The result is DENIED, never SUCCESS.
+    """
+    try:
+        import time
+        key = (user.user_id, request.method, request.url.path)
+        now = time.monotonic()
+        if now - _DENIAL_SEEN.get(key, 0) < 10:
+            return
+        _DENIAL_SEEN[key] = now
+        if len(_DENIAL_SEEN) > 5000:
+            _DENIAL_SEEN.clear()
+        from audit_log.store import get_audit_store
+        get_audit_store().log("ACCESS_DENIED", actor_id=user.user_id, actor_name=user.username, org_id=org_id or None,
+                              resource=f"{request.method} {request.url.path}", result="DENIED",
+                              detail={"role": user.role.value, "reason": reason, "required": required})
+    except Exception:
+        pass
+
+
 def org_access(*roles: UserRole):
     """
     Combined FastAPI dependency factory: checks org membership AND optional role restriction.
@@ -233,13 +258,14 @@ def org_access(*roles: UserRole):
     """
     from fastapi import Depends
 
-    async def _check(org_id: str, user: User = Depends(get_current_user)) -> User:
+    async def _check(request: Request, org_id: str, user: User = Depends(get_current_user)) -> User:
         # SUPER_ADMIN bypasses both org-membership and role checks
         if user.role == UserRole.SUPER_ADMIN:
             return user
 
         # Role check (if roles were specified)
         if roles and user.role not in roles:
+            audit_denied(request, user, "role", [r.value for r in roles], org_id)
             raise HTTPException(
                 status_code=403,
                 detail=(
@@ -250,6 +276,7 @@ def org_access(*roles: UserRole):
 
         # Org membership check
         if not get_user_store().has_org_access(user.user_id, org_id):
+            audit_denied(request, user, "organization", [org_id], org_id)
             raise HTTPException(
                 status_code=403,
                 detail=(
@@ -289,8 +316,9 @@ def require_roles(*roles: UserRole):
     """
     from fastapi import Depends
 
-    async def _check(user: User = Depends(get_current_user)) -> User:
+    async def _check(request: Request, user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:
+            audit_denied(request, user, "role", [r.value for r in roles])
             raise HTTPException(
                 status_code=403,
                 detail=(

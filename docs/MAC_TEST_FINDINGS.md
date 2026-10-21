@@ -1,0 +1,58 @@
+# Findings from the Mac test of 1.0.30
+
+Kept while testing `docs/MAC_FEATURE_TEST_CHECKLIST.md` on a real Mac with the real installers (server and agent 1.0.30, real detection model, anchoring on with two witnesses). Each item is something seen, not guessed. "Fix" means a change to make in a later release; nothing here is fixed yet.
+
+## Passed (so far)
+
+- Backup (`sudo veritas backup`, `backups`, `verify-backup`) and restore (`--dry-run`, then the real restore): every count returned to the backup's value, the chain stayed valid, the installed license was kept, anchoring kept working, and the replaced data was kept in `pre-restore-<time>`.
+- Install, license, setup page, first sign-in; agent install, registration and reading a log file.
+- Findings arrive grouped into incidents, with owners, names found by the model, no raw value in any incident.
+- Agent redaction: aadhaar and e-mail masked, phone hashed to a stable keyed token, a line with a card number dropped, the app's own log untouched, the masked copy holds no raw value.
+- Rules: propose, self-approve (single administrator), two-person approval (second administrator), review task once per incident, severity floor (Aadhaar stays HIGH under LOW), exception suppresses and counts and never hides a breach candidate, ending an exception restores findings, a server rule changed an agent's redaction within about a minute.
+- Audit pack: lists the rules in force; verifier PASS; an edited copy FAILS naming the record; with anchoring on, a forgery with every later hash recomputed FAILS against the checkpoints, while the same forgery with no checkpoints PASSES.
+- Rights request: lookup, erasure request, signed JSON and PDF records with no raw number, and `ERASURE_001` when the number came back.
+- Viewer: 4 read endpoints allowed, 13 sensitive or changing endpoints refused with 403 (checked at the API).
+
+- Policy packs (on a new organization): the three packs list as DRAFT with no reviewer; a preview adds 11 fields with the reason for each and saves nothing; applying without the acknowledgement is refused (409); applying with it adds the fields and no notice; applying twice adds nothing.
+- Audit pack downloaded through the browser: manifest OK for every file, verifier PASS against 10 checkpoints.
+- Schema watch: add/drop/create statements judged against the policy (7 statements, 4 findings, the INSERT ignored and never stored). OpenTelemetry receiver: JSON accepted; protobuf 415, bad JSON 400, no token 401, another organization 403, over 500 records 413. Retention review: one period overdue, others within or not observed. Pipeline gate: API examples and migrations against the policy.
+- Payload Tap (a FastAPI service with the middleware): the response to the caller is unchanged; the undeclared `user.aadhaar_no` is a `PURPOSE_001` finding from source `api`; declared phone and e-mail fields stay quiet; the erased phone number reported as a keyed token raised `ERASURE_001`; no raw value anywhere.
+- Breach report: downloads for a breach-candidate incident, carries the draft notice and the blank sections for people, no raw value (but see F10).
+
+## Bugs and gaps to fix
+
+| # | What was seen | Why it matters | Fix | Status |
+|---|---|---|---|---|
+| F1 | An exception typed with `Raw_snippet` (capital R) matched nothing, because scope matching is case-sensitive, and nothing warned that it covered zero findings | An exception can silently do nothing | Match ignoring case; show "covers 0 findings so far" on a new exception | **fixed: scope compared ignoring case, `nothing matched yet` shown on an exception that covers no findings, no auto-capitalisation in the form** |
+| F2 | A refused identifier lookup is audited, but the entry's `result` column says `SUCCESS` (the denial is only inside `detail`) | Anyone filtering the audit log by outcome counts a denial as a success | Record denials with `result: DENIED` (or FAILURE) | **fixed: a refusal is recorded as `ACCESS_DENIED` with result `DENIED`** |
+| F3 | The other refused requests (audit pack, breach report, evidence export, rule proposal and approval, resolving an incident, policy upload, users list, audit log, issuing an agent key) leave no audit entry | A reviewer cannot see a viewer trying to reach sensitive data | One `ACCESS_DENIED` audit entry for every 401/403 on a sensitive route, with the route and the role | **fixed: every 401/403 role or organization refusal on an authenticated route is audited (one entry per person and route every 10 seconds)** |
+| F4 | Audit entries have `ip_address: null` | No source address on who did what | Record the client address (and the forwarded address behind a proxy) | **fixed: the client address is recorded; a forwarded address is believed only when `VERITAS_TRUSTED_PROXY=true`** |
+| F5 | The same log line shape formed two incidents (INC-1 and INC-6) because the model found the name in some lines and not in others | Grouping splits on detection variance | Group by the line's shape with kinds normalised, or merge on same system, rule and field |
+| F6 | Anchoring is off on a fresh install, so a forgery with recomputed hashes passes the verifier | The default install does not deliver the tamper-evidence claim | Decide: on by default with a local witness and a warning, or a first-run prompt; mark it required in the checklist |
+| F7 | The agent applies a server redaction rule after about a minute, not 30 seconds (the server answers one heartbeat, the agent reports on the next) | The checklist said about 30 seconds | Correct the checklist (done: see below) | **fixed: checklist corrected** |
+| F8 | `sudo veritas restore` leaves **no entry** in the audit log or the evidence chain, and the audit log is itself restored from the backup, so every action between the backup and the restore (here a user creation and a rule proposal) disappears from the live audit log. They survive only in the `pre-restore-<time>` folder | A restore silently erases the history of what happened in that window, and nothing says a restore took place | After a restore, write an audit entry (who ran it, which backup, when, how many records and findings the live system dropped) and a chained event; show the dropped window on the dashboard |
+| F9 | **Confirmed.** After restoring an older backup, `veritas-verify --witness-dir` reports `WITNESS_DIVERGENCE: checkpoint 9 differs between the server's copy and a witness copy`: the witness folder still holds a checkpoint from the discarded history next to the new one with the same number. It fails permanently, and nothing in the chain explains it | A legitimate restore looks exactly like tampering to an auditor, forever | On start-up the server reads the highest checkpoint number in the witnesses and continues above it. A restore writes a signed RESTORE event into the chain and the next checkpoint, naming the backup, the old head and the new head, and the verifier reports a divergence that a RESTORE event explains as `RESTORED_HISTORY` (information) instead of a failure. Document the procedure |
+| F10 | The breach report for an incident about an Aadhaar number says "Kinds of personal data involved: not recorded in the findings". For `EXPOSURE_001` the finding stores no registry entry, so the report finds nothing; the kind (`aadhaar`) is only in the finding's "why" trace | A breach report that does not name the kind of data is missing its most important fact | Read the kinds from the findings' traces (`context.kind_of_data`), and fall back to the stored entry | **fixed: the report reads the kind of data from the findings' traces** |
+| F11 | The report label reads "Contact of the dpo" (lowercase) | Cosmetic | Write field labels explicitly, with "DPO" in capitals | **fixed: field labels written out** |
+| F12 | The audit pack downloaded from the browser has no verifier in it (the folder holds only the evidence, checkpoints, key, summary and scripts), and `verify.sh` then needs the customer to find `veritas-verify` elsewhere | The "check it yourself" promise needs a download the customer may not find | Ship `veritas-verify` inside the server package (for example `/opt/veritas/verifier/`) and have the audit pack include it by default for the host platform |
+| F13 | The pipeline gate fails on `user@example.com`, the placeholder e-mail used in nearly every API document | A team's first build fails on documentation examples, and they turn the gate off | Accept the reserved example domains (example.com, .org, .net, .test, .invalid) and obviously masked values by default; keep `--allow` for the rest | **fixed: reserved example domains are placeholders in the gate** |
+| F14 | `veritas_gate.py --migrations` ends with "1 personal-data value(s) found" when it found an undeclared column | Wrong word: it is a column, not a value | Say "finding(s)" | **fixed: the gate counts values and undeclared columns separately** |
+| F15 | Checklist section 11 uses `kyc-service` + `aadhaar_no`, which correctly raises nothing on an organization that declares Aadhaar for `kyc-service` | The test seems to fail when it is working | Use `web-backend` in the example, and say which system declares what | **fixed: checklist section 11 rewritten** |
+| F16 | `python veritas_tap.py register ...` fails with `CERTIFICATE_VERIFY_FAILED: self-signed certificate` against a default install, and ignores `VERITAS_TAP_CA_CERT` (the setting only applies to the running tap, not to the register command) | The first command in the Payload Tap guide fails on the product's own default certificate; the workaround is registering with `curl` | Make `register` honour `VERITAS_TAP_CA_CERT` and add a `--ca-cert` option; document the curl route | **fixed: `register` takes `--ca-cert`, reads `VERITAS_TAP_CA_CERT`, and `--fetch-cert` saves the server's certificate** |
+| F17 | The rate limiter believed any `X-Forwarded-For` header, so a client could dodge per-address limits by sending a made-up address | Rate limits could be bypassed | **fixed:** believed only when `VERITAS_TRUSTED_PROXY=true` |
+
+## UI to change
+
+| # | What | Where |
+|---|---|---|
+| U1 | The last navigation tab is cut off to "S" (Scan Sandbox) at a 2000 px screen | header navigation |
+| U2 | Form text boxes have a heavy double outline | Rules forms, other forms |
+| U3 | The exception form capitalises the first letter of the field | Rules, exception form |
+| U4 | New request: "received" and "due" are easy to confuse, and a received date in the future is not flagged | Rights requests |
+| U5 | Review tasks (one per incident) crowd out real rights requests | Rights requests: needs a tab or a filter |
+| U6 | Audit Ledger rows are tall: the "What happened" column is narrow and timestamps wrap onto four lines | Audit Ledger |
+| U7 | The light and dark themes both need a pass on contrast for the small mono text (badges, license) | all pages |
+
+## Still to test
+
+Syslog, the Node tap, uninstall, upgrade from 1.0.28, alerts, and the viewer's screens in a browser.

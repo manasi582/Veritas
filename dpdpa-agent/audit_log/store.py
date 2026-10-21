@@ -98,6 +98,9 @@ class AuditLogStore:
     ) -> None:
         """Append an audit log entry. Never raises — failures are logged but swallowed."""
         try:
+            if ip_address is None:
+                from request_context import current_client_ip
+                ip_address = current_client_ip()
             detail_json = json.dumps(detail, default=str) if detail else None
             with self._lock:
                 self._conn.execute(

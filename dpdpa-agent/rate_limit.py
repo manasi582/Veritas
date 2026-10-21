@@ -132,11 +132,9 @@ _limiter = _RateLimiter()
 
 
 def _client_ip(request: Request) -> str:
-    """Extract client IP from request, respecting X-Forwarded-For if trusted."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """The client address for rate limiting. A forwarded address counts only behind a trusted proxy (request_context)."""
+    from request_context import client_ip_of
+    return client_ip_of(request)
 
 
 # ---------------------------------------------------------------------------

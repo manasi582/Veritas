@@ -312,7 +312,10 @@ class Active:
     def exception_for(self, rule_id: str, system: str, field: str, today: date) -> Optional[dict]:
         for e in self.exceptions:
             s = e["setting"]
-            if (s["rule_id"] == rule_id and fnmatch.fnmatchcase(system, s["system"]) and fnmatch.fnmatchcase(field, s["field"])
+            # names and fields are compared ignoring case: an exception only narrows, so being forgiving here cannot widen it,
+            # and a scope typed as "Raw_snippet" must not silently match nothing
+            if (s["rule_id"] == rule_id and fnmatch.fnmatchcase(system.lower(), s["system"].lower())
+                    and fnmatch.fnmatchcase(field.lower(), s["field"].lower())
                     and date.fromisoformat(s["expires_at"]) > today):
                 return e
         return None

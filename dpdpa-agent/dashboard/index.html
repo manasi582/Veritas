@@ -2122,6 +2122,7 @@
           </div>
         </div>
         <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">Veritas reports where it <b>observed</b> an identifier in the logs it received. It does not store the identifier, and a closed request is not a certificate that data was erased everywhere. <span id="reqDeadlineNote"></span></p>
+        <div id="reqFilters" class="seg" style="display:inline-flex;gap:2px;padding:3px;border-radius:999px;margin:0 0 10px;"></div>
         <div class="table-container"><div class="table-wrap">
           <table id="reqTable">
             <thead><tr><th>Reference</th><th>Type</th><th>Status</th><th>Received</th><th>Due</th><th>Systems</th><th>Action</th></tr></thead>
@@ -2268,8 +2269,8 @@
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin:1rem 0;font-size:0.85rem;">
     <label>Type<br><select id="reqType" style="width:100%;"><option value="erasure">erasure</option><option value="access">access</option><option value="correction">correction</option></select></label>
     <label>Reference (ticket number)<br><input type="text" id="reqRef" maxlength="100" autocomplete="off" style="width:100%;"></label>
-    <label>Received<br><input type="date" id="reqReceived" style="width:100%;"></label>
-    <label>Due (optional)<br><input type="date" id="reqDue" style="width:100%;"></label>
+    <label>Date received<br><span style="font-size:0.72rem;color:var(--text-muted)">the day the person asked</span><br><input type="date" id="reqReceived" style="width:100%;"></label>
+    <label>Respond by (optional)<br><span style="font-size:0.72rem;color:var(--text-muted)">the deadline you are working to</span><br><input type="date" id="reqDue" style="width:100%;"></label>
   </div>
   <div style="font-size:0.85rem;margin-bottom:0.4rem;">Identifiers</div>
   <div id="reqIdentifiers"></div>
@@ -2944,19 +2945,22 @@ function renderIncidents(rows) {
   }
   tbody.innerHTML = rows.map(i => {
     const owner = i.owner ? [i.owner.team, i.owner.slack_channel, i.owner.email].filter(Boolean).map(escapeHtml).join(' · ') : '<span style="color:var(--text-muted)">no owner set</span>';
-    const fmt = t => t ? new Date(t).toLocaleString() : '';
+    const fmtShort = t => t ? new Date(t).toLocaleString(undefined, {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false}) : '';
+    const fmtTime = t => t ? new Date(t).toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false}) : '';
+    const sameDay = i.first_seen && i.last_seen && new Date(i.first_seen).toDateString() === new Date(i.last_seen).toDateString();
+    const range = `<div style="white-space:nowrap">${fmtShort(i.first_seen)}</div><div class="inc-hint" style="white-space:nowrap">&rarr; ${sameDay ? fmtTime(i.last_seen) : fmtShort(i.last_seen)}</div>`;
     const id = safeId(i.incident_id);
     const report = i.breach_candidate ? `<span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN,AUDITOR"><a class="btn btn-secondary" style="padding:4px 9px;font-size:11px;text-decoration:none;" title="A draft breach report for the DPO and counsel, built from the signed chain" href="/v1/${encodeURIComponent(currentOrgId)}/incidents/${id}/breach-pack">Breach report</a></span> ` : '';
     const actions = report + (i.status === 'RESOLVED' ? '' :
       `<span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN">${i.status === 'OPEN' ? `<button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="setIncidentStatus('${id}','ACKNOWLEDGED')">Acknowledge</button> ` : ''}<button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="setIncidentStatus('${id}','RESOLVED')">Resolve</button></span>`);
     return `<tr>
-      <td class="mono" style="color:var(--text-headings)">INC-${escapeHtml(i.number)}</td>
+      <td class="mono" style="color:var(--text-headings);white-space:nowrap">INC-${escapeHtml(i.number)}</td>
       <td><span class="badge ${safeId(i.severity)}">${escapeHtml(i.severity)}</span>${i.breach_candidate ? ' <span title="breach notification candidate" style="color:var(--breach)">&#9888;</span>' : ''}</td>
       <td><div class="inc-template">${escapeHtml(i.template)}</div>
           <div class="inc-hint"><span class="badge rule">${escapeHtml(i.rule_id)}</span> field ${escapeHtml(i.field)}${i.hint ? ' · ' + escapeHtml(i.hint) : ''}</div></td>
       <td style="font-size:12px;">${escapeHtml(i.source_system)}<div class="inc-hint">${owner}</div></td>
       <td class="mono" style="text-align:right;color:var(--text-headings)">${Number(i.count).toLocaleString()}</td>
-      <td style="font-size:11.5px;">${fmt(i.first_seen)}<br>${fmt(i.last_seen)}</td>
+      <td style="font-size:11.5px;">${range}</td>
       <td style="color:var(--accent-blue)">${sparkline(i.sparkline || [])}</td>
       <td><span class="status-badge ${safeId(i.status)}">${escapeHtml(i.status)}</span>${i.recurred ? `<span class="recurred-badge" title="reopened ${i.recurred_count} time(s) after being resolved">recurred${i.recurred_count > 1 ? ' ×' + i.recurred_count : ''}</span>` : ''}</td>
       <td style="white-space:nowrap;">${actions} <button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="toggleIncident('${id}')">Findings</button></td>
@@ -3354,6 +3358,10 @@ async function runLookup() {
 }
 
 let requestRows = [];
+let requestFilter = 'rights';
+const REQUEST_GROUPS = {rights: ['access', 'erasure', 'correction'], retention: ['retention'], review: ['review']};
+const REQUEST_GROUP_LABELS = {rights: 'Rights requests', retention: 'Retention tasks', review: 'Review tasks', all: 'All'};
+function setRequestFilter(f) { requestFilter = f; renderRequests(); }
 
 // ---- Rules: what is in force, proposals, approvals, exceptions ----
 let rulesState = {rules: [], self_approval_allowed: false};
@@ -3416,7 +3424,7 @@ function renderRuleExceptions(rows) {
   if (!rows.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1rem;">None. An exception always ends on a date.</td></tr>'; return; }
   tbody.innerHTML = rows.map(c => `<tr><td class="mono">${escapeHtml(c.number)}</td><td class="mono">${escapeHtml(c.setting.rule_id)}</td>
     <td>${escapeHtml(c.setting.system)} / ${escapeHtml(c.setting.field)}</td><td style="font-size:12px">${escapeHtml(c.setting.reason)}</td>
-    <td>${escapeHtml(c.setting.owner)}</td><td>${escapeHtml(c.setting.expires_at)}</td><td>${escapeHtml(c.findings_covered)}</td>
+    <td>${escapeHtml(c.setting.owner)}</td><td>${escapeHtml(c.setting.expires_at)}</td><td>${escapeHtml(c.findings_covered)}${c.note ? `<div style="font-size:11px;color:var(--vt-orange)" title="${escapeAttr(c.note)}">nothing matched yet</div>` : ''}</td>
     <td><span data-require-role="SUPER_ADMIN,COMPLIANCE_ADMIN"><button class="btn btn-secondary" style="padding:4px 9px;font-size:11px;" onclick="ruleDecision('${safeId(c.change_id)}','revoke')">End now</button></span></td></tr>`).join('');
   if (window.__veritasRole) applyRoleUI(window.__veritasRole);
 }
@@ -3466,13 +3474,13 @@ function openExceptionForm() {
   box.innerHTML = `<h4 style="margin:0 0 8px">Propose an exception</h4>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;font-size:12px">
       <label>Rule<br><select id="efRule">${rules}</select></label>
-      <label>System<br><input type="text" id="efSystem" placeholder="orders-service or *"></label>
-      <label>Field<br><input type="text" id="efField" value="*"></label>
+      <label>System<br><input type="text" id="efSystem" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="orders-service or *"></label>
+      <label>Field<br><input type="text" id="efField" autocapitalize="off" autocorrect="off" spellcheck="false" value="*"></label>
       <label>Ends on<br><input type="date" id="efEnds"></label>
-      <label>Owner<br><input type="text" id="efOwner" placeholder="Orders team"></label>
-      <label>Ticket<br><input type="text" id="efTicket" placeholder="optional"></label>
+      <label>Owner<br><input type="text" id="efOwner" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Orders team"></label>
+      <label>Ticket<br><input type="text" id="efTicket" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="optional"></label>
     </div>
-    <div style="margin-top:8px"><input type="text" id="efReason" placeholder="why this is accepted for now (10 or more characters)" style="width:70%"></div>
+    <div style="margin-top:8px"><input type="text" id="efReason" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="why this is accepted for now (10 or more characters)" style="width:70%"></div>
     <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">An exception must narrow to a system or a field, always ends, still counts the findings it covers, and never covers a possible breach candidate.</div>
     <div style="margin-top:10px"><button class="btn btn-primary" onclick="submitException()">Propose</button> <button class="btn btn-secondary" onclick="document.getElementById('ruleForm').style.display='none'">Cancel</button></div>`;
 }
@@ -3512,11 +3520,20 @@ async function loadRequests() {
 
 function renderRequests() {
   const tbody = document.getElementById('reqTbody');
+  const inGroup = (q, g) => g === 'all' || (REQUEST_GROUPS[g] || []).includes(q.type);
+  const counts = g => requestRows.filter(q => inGroup(q, g) && q.status === 'OPEN').length;
+  document.getElementById('reqFilters').innerHTML = ['rights', 'retention', 'review', 'all'].map(g =>
+    `<button class="btn ${requestFilter === g ? 'active' : ''}" style="border-radius:999px;font-size:12px;padding:5px 12px;${requestFilter === g ? 'background:var(--vt-nav-active-bg);color:var(--vt-nav-active-text);' : 'background:transparent;box-shadow:none;color:var(--text-muted);'}" onclick="setRequestFilter('${g}')">${REQUEST_GROUP_LABELS[g]}${counts(g) ? ` <span style="opacity:.75">${counts(g)} open</span>` : ''}</button>`).join('');
+  const shown = requestRows.filter(q => inGroup(q, requestFilter));
+  if (!shown.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem;">Nothing here.${requestFilter !== 'all' ? ' Try "All".' : ''}</td></tr>`;
+    return;
+  }
   if (!requestRows.length) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem;">No requests yet.</td></tr>';
     return;
   }
-  tbody.innerHTML = requestRows.map(q => {
+  tbody.innerHTML = shown.map(q => {
     const done = q.tasks.filter(t => t.status === 'CONFIRMED').length;
     const due = q.due_at ? new Date(q.due_at).toLocaleDateString() : '—';
     return `<tr>
@@ -3593,7 +3610,9 @@ function addRequestIdentifier() {
 function openRequestModal() {
   document.getElementById('reqRef').value = '';
   document.getElementById('reqDue').value = '';
-  document.getElementById('reqReceived').value = new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('reqReceived').max = today;
+  document.getElementById('reqReceived').value = today;
   document.getElementById('reqIdentifiers').replaceChildren();
   document.getElementById('reqError').style.display = 'none';
   addRequestIdentifier();
@@ -3606,6 +3625,14 @@ function closeRequestModal() {
 
 async function submitRequest() {
   const err = document.getElementById('reqError');
+  const received = document.getElementById('reqReceived').value, due = document.getElementById('reqDue').value;
+  if (received && received > new Date().toISOString().slice(0, 10)) {
+    err.textContent = 'The received date is in the future. "Date received" is the day the person asked; put your deadline in "Respond by".';
+    err.style.display = ''; return;
+  }
+  if (received && due && due < received) {
+    err.textContent = 'The deadline is before the date received.'; err.style.display = ''; return;
+  }
   const ids = [...document.querySelectorAll('#reqIdentifiers > div')].map(d => ({
     category: d.querySelector('.req-cat').value, identifier: d.querySelector('.req-id').value })).filter(x => x.identifier.trim());
   const body = JSON.stringify({

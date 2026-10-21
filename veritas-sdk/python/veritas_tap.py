@@ -338,15 +338,54 @@ class WSGIMiddleware:
 
 # --------------------------------------------------------------------------- registering the tap
 
-def register(url: str, registration_key: str, label: str = "payload-tap", timeout: float = 15.0) -> Dict[str, Any]:
-    """Register with the server like an agent does (Agents, Issue Registration Key). Returns what to put in the environment."""
+def _tls_context(ca_cert: Optional[str]):
+    """A context that trusts the given certificate file (a server using Veritas's own certificate), or the system's by default."""
+    import ssl
+    return ssl.create_default_context(cafile=ca_cert) if ca_cert else ssl.create_default_context()
+
+
+def fetch_server_cert(url: str, path: str, timeout: float = 15.0) -> str:
+    """
+    Save the server's certificate to `path` so later calls can trust exactly that certificate (trust on first use, the same
+    approach the agent takes). Compare it with the one in the dashboard if you need to be certain.
+    """
+    import ssl
+    ctx = ssl.create_default_context()
+    ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE        # only to read the public certificate, never to send a secret
+    req = urllib.request.Request(url.rstrip("/") + "/api/tls/cert")
+    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:      # noqa: S310
+        pem = r.read()
+    with open(path, "wb") as f:
+        f.write(pem)
+    return path
+
+
+def register(url: str, registration_key: str, label: str = "payload-tap", timeout: float = 15.0,
+             ca_cert: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Register with the server like an agent does (Agents, Issue Registration Key). Returns what to put in the environment.
+    `ca_cert` (or VERITAS_TAP_CA_CERT) names the server's certificate file when it uses Veritas's own certificate.
+    """
+    import os
+    import ssl
+    ca_cert = ca_cert or os.environ.get("VERITAS_TAP_CA_CERT") or None
     req = urllib.request.Request(url.rstrip("/") + "/agent/register", method="POST",
                                  data=json.dumps({"registration_key": registration_key, "source_label": label}).encode(),
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:      # noqa: S310
-        data = json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=_tls_context(ca_cert)) as r:      # noqa: S310
+            data = json.loads(r.read())
+    except urllib.error.URLError as e:
+        if isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
+            raise SystemExit(
+                "The server's certificate is not trusted by this machine (Veritas makes its own certificate by default).\n"
+                "Save it with:  python veritas_tap.py --url %s --fetch-cert server.crt\n"
+                "then register again with:  --ca-cert server.crt   (and set VERITAS_TAP_CA_CERT=server.crt for the running tap)." % url)
+        raise
     org = data["event_endpoint"].split("/")[2]
     out = {"VERITAS_TAP_URL": url, "VERITAS_TAP_TOKEN": data["auth_token"], "VERITAS_TAP_ORG": org}
+    if ca_cert:
+        out["VERITAS_TAP_CA_CERT"] = ca_cert
     if isinstance(data.get("redaction_key"), dict):
         out["VERITAS_TAP_HASH_KEY (only for hash mode)"] = data["redaction_key"]["key"]
     return out
@@ -355,11 +394,18 @@ def register(url: str, registration_key: str, label: str = "payload-tap", timeou
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="Register a Veritas payload tap and print its settings")
-    ap.add_argument("register")
+    ap.add_argument("register", nargs="?", help="(the word register; optional when --fetch-cert is used)")
     ap.add_argument("--url", required=True)
-    ap.add_argument("--key", required=True, help="a registration key from the Veritas dashboard")
+    ap.add_argument("--key", help="a registration key from the Veritas dashboard")
     ap.add_argument("--label", default="payload-tap")
+    ap.add_argument("--ca-cert", help="the server's certificate file, when the server uses Veritas's own certificate")
+    ap.add_argument("--fetch-cert", metavar="FILE", help="save the server's certificate to FILE (trust on first use) and stop")
     a = ap.parse_args()
-    for k, v in register(a.url, a.key, a.label).items():
+    if a.fetch_cert:
+        print("saved the server certificate to", fetch_server_cert(a.url, a.fetch_cert))
+        raise SystemExit(0)
+    if not a.key:
+        ap.error("--key is required to register")
+    for k, v in register(a.url, a.key, a.label, ca_cert=a.ca_cert).items():
         print(f"{k}={v}")
     print("VERITAS_TAP_SYSTEM=<the system name your policy uses>")

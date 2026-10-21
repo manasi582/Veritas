@@ -55,12 +55,24 @@ def leaves(node: Any, where: str, in_example: bool, out: List[Tuple[str, str]], 
         out.append((where, str(node)))
 
 
+# Documentation placeholders are not personal data: an e-mail at a domain reserved for examples (RFC 2606) or testing.
+_RESERVED_DOMAINS = ("example.com", "example.org", "example.net", "example.edu")
+_RESERVED_TLDS = (".example", ".test", ".invalid", ".localhost")
+
+
+def is_placeholder_email(text: str) -> bool:
+    domain = text.rsplit("@", 1)[-1].strip().lower().rstrip(".>) ,;")
+    return domain in _RESERVED_DOMAINS or domain.endswith(tuple("." + d for d in _RESERVED_DOMAINS)) or domain.endswith(_RESERVED_TLDS)
+
+
 def scan_document(doc: Any, label: str, whole_file: bool = False) -> List[dict]:
     found: List[dict] = []
     pairs: List[Tuple[str, str]] = []
     leaves(doc, label, whole_file, pairs)
     for where, value in pairs:
         for d in vr.scan(value[:4000]):
+            if d.label.lower() == "email" and is_placeholder_email(value[:4000][d.start:d.end]):
+                continue
             found.append({"where": where, "kind": d.label.lower(), "masked": vr.mask(value[:4000], [d])[:120]})
     return found
 
@@ -181,7 +193,11 @@ def main(argv: Iterable[str] = None) -> int:
             print(f"FOUND {f['kind']:8} at {f['where']}: {f['masked']}" if "masked" in f else f"UNDECLARED {f['kind']:8} {f['message']} (in {f['where']})")
         for p in problems:
             print(f"COULD NOT READ {p}", file=sys.stderr)
-        print(f"{len(findings)} personal-data value(s) found" + (f", {len(problems)} file(s) unreadable" if problems else ""))
+        values = [f for f in findings if "masked" in f]
+        columns = [f for f in findings if "masked" not in f]
+        print(f"{len(values)} personal-data value(s) found"
+              + (f", {len(columns)} undeclared personal-data column(s)" if a.migrations else "")
+              + (f", {len(problems)} file(s) unreadable" if problems else ""))
     return 2 if problems and not findings else (1 if findings else 0)
 
 

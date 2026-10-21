@@ -10,7 +10,7 @@ Veritas can stop a change **before it ships**. `veritas-sdk/python/veritas_gate.
 | Sample payloads | `python veritas_gate.py --payloads tests/fixtures/` | a sample JSON file holds such a value |
 | **Migrations against the policy** | `python veritas_gate.py --migrations db/migrations --policy veritas-policy.yaml --system orders-db` | a migration leaves a column whose name suggests personal data and the policy does not declare it |
 
-Values are shown masked, never as written. The migration check applies the files in name order and judges the columns that remain, so a column added and later dropped, or a table dropped, does not count. It reads PostgreSQL and MySQL DDL the same way the server's Schema Watch does ([SCHEMA_WATCH.md](SCHEMA_WATCH.md)), and uses the same test for "declared" (by field name, or by category). `schema_hints` in the policy corrects a wrong guess.
+Values are shown masked, never as written. An e-mail at a domain reserved for examples (`example.com`, `.org`, `.net`, `.edu`, and the `.example`, `.test`, `.invalid`, `.localhost` endings) is a documentation placeholder and is not flagged; a real-looking domain is. The migration check applies the files in name order and judges the columns that remain, so a column added and later dropped, or a table dropped, does not count. It reads PostgreSQL and MySQL DDL the same way the server's Schema Watch does ([SCHEMA_WATCH.md](SCHEMA_WATCH.md)), and uses the same test for "declared" (by field name, or by category). `schema_hints` in the policy corrects a wrong guess.
 
 The policy file is the organization's Veritas policy (an object with a `fields` list), exported from the dashboard or kept in the repository.
 

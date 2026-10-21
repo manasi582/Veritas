@@ -129,7 +129,15 @@ async def exceptions(org_id: str, _user: User = Depends(check_org_access)):
     store = get_store()
     hits = changes.exception_hits(store, org_id)
     rows = changes.list_changes(store, org_id, status=changes.APPROVED, kind=changes.EXCEPTION)
-    return {"exceptions": [{**c, "findings_covered": hits.get(c["change_id"], 0)} for c in rows]}
+    out = []
+    for c in rows:
+        n = hits.get(c["change_id"], 0)
+        e = {**c, "findings_covered": n}
+        if n == 0:
+            e["note"] = ("No finding has matched this scope yet. Check the system and field names (they are compared ignoring case; "
+                         "`*` matches anything).")
+        out.append(e)
+    return {"exceptions": out}
 
 
 @router.get("/{org_id}/findings/{violation_id}/why")

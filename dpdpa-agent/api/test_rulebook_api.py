@@ -93,3 +93,13 @@ def test_why_returns_the_trace_or_says_there_is_none():
     r = c.get(f"/v1/{ORG}/findings/{n}/why").json()
     assert r["recorded"] is True and r["trace"]["clauses"] and "counsel" in r["note"]
     assert c.get(f"/v1/{ORG}/findings/9999/why").status_code == 404
+
+
+def test_an_exception_that_matched_nothing_says_so():
+    a, b = client(UserRole.COMPLIANCE_ADMIN, "alice"), client(UserRole.COMPLIANCE_ADMIN, "bob")
+    cid = propose(a, kind="EXCEPTION", target=None, setting={"rule_id": "EXPOSURE_001", "system": "orders", "field": "Raw_snippet",
+                                                             "reason": "known debug logging, being removed", "owner": "Orders team",
+                                                             "expires_at": ends()}).json()["change_id"]
+    b.post(f"/v1/{ORG}/rules/changes/{cid}/approve", json={})
+    rows = a.get(f"/v1/{ORG}/rules/exceptions").json()["exceptions"]
+    assert rows[0]["findings_covered"] == 0 and "No finding has matched" in rows[0]["note"]

@@ -137,25 +137,32 @@ for i in $(seq 1 300); do send noisy-service "debug cache refresh for tenant $i 
 
 ## 11. Database schema watch
 
+Send these as events with `"source_kind":"schema"` (or use the `db_schema_log` agent source in `docs/SCHEMA_WATCH.md`). They assume the policy declares phone and e-mail for `web-backend`, and Aadhaar and PAN for `kyc-service` (as in section 5); change the systems if yours differ:
+
 ```bash
-send kyc-service "ALTER TABLE customers ADD COLUMN aadhaar_no varchar(12);" 
+sendschema() { curl -sk -X POST https://localhost:8000/v1/demo_corp/events -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"source_type\":\"log\",\"source_system\":\"$1\",\"source_kind\":\"schema\",\"raw_snippet\":\"$2\"}" -o /dev/null -w "%{http_code}\n"; }
+sendschema web-backend "ALTER TABLE customers ADD COLUMN aadhaar_no varchar(12);"      # a finding: not declared for web-backend
+sendschema kyc-service "ALTER TABLE customers ADD COLUMN aadhaar_no varchar(12);"      # quiet: kyc-service declares Aadhaar
+sendschema kyc-service "ALTER TABLE customers ADD COLUMN passport_number varchar(20);" # a finding: declared nowhere
+sendschema web-backend "ALTER TABLE orders ADD COLUMN created_at timestamp;"           # quiet: not personal data
+sendschema web-backend "ALTER TABLE customers DROP COLUMN aadhaar_no;"                  # recorded as dropped, raises nothing
 ```
 
-(as an event with `"source_kind":"schema"` in the JSON; or use the `db_schema_log` agent source in `docs/SCHEMA_WATCH.md`)
-
-- [ ] A finding appears: a database change adds a column that looks like Aadhaar data and the policy does not declare it, with the system's owner.
-- [ ] **Data map**, *Database schema changes* lists the column as undeclared.
-- [ ] `ALTER TABLE customers DROP COLUMN aadhaar_no;` is recorded as dropped and raises nothing.
+- [ ] The first and third statements each raise a finding that names the column and the system's owner; the second, fourth and fifth raise nothing.
+- [ ] **Data map**, *Database schema changes* lists every column with its status (undeclared, declared by category, dropped).
+- [ ] An `INSERT` carrying a phone number is counted but never read or stored.
 
 ## 12. API payloads (Payload Tap) and the pipeline gate
 
 - [ ] Follow `docs/PAYLOAD_TAP.md` to wrap a small Python (FastAPI) service with the tap, call a route whose response holds a phone number in an undeclared field. A finding names the route's field (for example `user.phone`) and the service is never blocked or slowed noticeably.
 - [ ] The Data map shows the system as seen in an **API**.
-- [ ] **Gate, API examples:** `python3 veritas-sdk/python/veritas_gate.py openapi.json` fails (exit 1, values masked) on a spec with a phone number in an example, passes on a clean one.
+- [ ] **Gate, API examples:** `python3 veritas-sdk/python/veritas_gate.py openapi.json` fails (exit 1, values masked) on a spec with a real-looking phone number or an e-mail at a real domain, and passes on a clean one. `user@example.com` is a placeholder and passes.
 - [ ] **Gate, migrations:** put `CREATE TABLE users (id int, phone text);` in `m/001.sql` and `ALTER TABLE users ADD COLUMN passport_number text;` in `m/002.sql`; export the policy from **Policy** to `policy.json`;
   `python3 veritas-sdk/python/veritas_gate.py --migrations m --policy policy.json`
   - [ ] it exits 1 and names `users.passport_number` (not declared);
   - [ ] adding `ALTER TABLE users DROP COLUMN passport_number;` as `m/003.sql` makes it pass.
+- [ ] **Registering the tap against a default install:** `python veritas_tap.py --url https://localhost:8000 --fetch-cert server.crt`, then `python veritas_tap.py register --url https://localhost:8000 --key <key> --ca-cert server.crt` prints the settings.
 
 ## 13. Retention review
 
@@ -210,7 +217,7 @@ curl -sk -X POST https://localhost:8000/v1/demo_corp/otlp/logs -H "Authorization
 - [ ] **Propose an exception** for system `marketing-service`, rule `EXPOSURE_001`, with a reason, owner and an end date. It refuses a scope of everything and an end date more than 180 days away. After approval, new findings in that system are not stored, and **Exceptions in force** counts them ("findings covered"). An Aadhaar finding in that system is still raised.
 - [ ] **End now** on the exception: findings are raised again.
 - [ ] There is no setting to switch a core rule off, and no block action.
-- [ ] Propose an overlay with *redact* for `phone: mask` and approve it. Within about 30 seconds an agent running in monitor mode starts masking phone numbers (the Agents page shows the change).
+- [ ] Propose an overlay with *redact* for `phone: mask` and approve it. Within about a minute an agent running in monitor mode starts masking phone numbers (the Agents page shows the change). The server answers on one heartbeat and the agent reports the change on the next, so allow two heartbeats (30 seconds each).
 - [ ] The audit pack summary now lists the rules in force and any self-approved change.
 
 ## 19. Policy packs

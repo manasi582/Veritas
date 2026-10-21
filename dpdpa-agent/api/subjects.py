@@ -77,21 +77,11 @@ def _identifiers(body: dict) -> List[tuple]:
 
 # --------------------------------------------------------------------------- lookup
 
-_admin_check = org_access(*ADMIN)
-
-
-async def lookup_admin(org_id: str, user: User = Depends(get_current_user)) -> User:
-    """Same rule as every other administrator route, but a refusal is itself audited: a lookup is sensitive."""
-    try:
-        return await _admin_check(org_id=org_id, user=user)
-    except HTTPException as e:
-        if e.status_code in (401, 403):
-            _audit(user, "SUBJECT_LOOKUP", org_id, "subjects", {"result": "denied", "role": user.role.value})
-        raise
+_admin_check = org_access(*ADMIN)     # a refusal is audited centrally (api/auth_deps.audit_denied), result DENIED
 
 
 @router.post("/{org_id}/subjects/lookup")
-async def lookup(org_id: str, request: Request, user: User = Depends(lookup_admin)):
+async def lookup(org_id: str, request: Request, user: User = Depends(_admin_check)):
     _limiter.check("subject_lookup", user.user_id, max_requests=30, window_seconds=60)
     body = await _body(request)
     category, identifier = body.get("category"), body.get("identifier")
