@@ -2,6 +2,10 @@
 
 What changed in each release, in plain language. The newest release is first. Every release is built and install-tested by CI on clean machines for each platform.
 
+## 1.0.32
+
+- **The Overview now counts incidents the way the Audit Ledger does.** Resolving an incident left the Overview showing every finding as open, so "Resolved" stayed at 0. The cards and bars are now Open Incidents, Resolved Incidents and Incident Status, and follow incident status. Total findings, Breach Candidates and the severity breakdown still count findings, and resolving an incident still leaves its findings untouched as evidence.
+
 ## 1.0.31
 
 Fixes from a hands-on test of 1.0.30 on a real Mac (`docs/MAC_TEST_FINDINGS.md`).

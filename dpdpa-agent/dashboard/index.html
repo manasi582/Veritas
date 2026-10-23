@@ -1635,12 +1635,12 @@
             <svg class="bg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           </div>
           <div class="stat-card">
-            <div class="label">Open Cases</div>
+            <div class="label">Open Incidents</div>
             <div class="value high" id="ov-open">0</div>
             <svg class="bg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
           </div>
           <div class="stat-card">
-            <div class="label">Resolved Cases</div>
+            <div class="label">Resolved Incidents</div>
             <div class="value" id="ov-resolved" style="color:var(--low)">0</div>
             <svg class="bg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
@@ -1666,7 +1666,7 @@
 
           <!-- Status Breakdown -->
           <div class="overview-card">
-            <h3>Remediation Status</h3>
+            <h3>Incident Status</h3>
             <div class="progress-item">
               <div class="progress-item-header"><span>OPEN</span><span id="ov-stat-open-lbl">0</span></div>
               <div class="progress-track"><div class="progress-fill" id="ov-stat-open-fill" style="width:0%; background:var(--accent-blue)"></div></div>
@@ -2876,8 +2876,15 @@ async function refreshOverview() {
 
     document.getElementById('ov-total').textContent = s.total;
     document.getElementById('ov-breach').textContent = s.breach_candidates;
-    document.getElementById('ov-open').textContent = s.by_status?.OPEN || 0;
-    document.getElementById('ov-resolved').textContent = s.by_status?.RESOLVED || 0;
+    // Open and resolved are counted on incidents: resolving an incident closes the cause and leaves its findings as evidence
+    let inc = { by_status: {} };
+    try {
+      const ir = await fetch(`/v1/${encodeURIComponent(currentOrgId)}/incidents/summary`, { credentials: 'include' });
+      if (ir.ok) inc = await ir.json();
+    } catch (e) {}
+    const incStat = inc.by_status || {};
+    document.getElementById('ov-open').textContent = (incStat.OPEN || 0) + (incStat.ACKNOWLEDGED || 0);
+    document.getElementById('ov-resolved').textContent = incStat.RESOLVED || 0;
 
     const sev = s.by_severity || {};
     const sevTotal = (sev.HIGH || 0) + (sev.MEDIUM || 0) + (sev.LOW || 0);
@@ -2885,7 +2892,7 @@ async function refreshOverview() {
     setProgress('ov-sev-med', sev.MEDIUM || 0, sevTotal);
     setProgress('ov-sev-low', sev.LOW || 0, sevTotal);
 
-    const stat = s.by_status || {};
+    const stat = incStat;
     const statTotal = (stat.OPEN || 0) + (stat.ACKNOWLEDGED || 0) + (stat.RESOLVED || 0);
     setProgress('ov-stat-open', stat.OPEN || 0, statTotal);
     setProgress('ov-stat-ack', stat.ACKNOWLEDGED || 0, statTotal);
